@@ -5,16 +5,37 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'photo_uploader.dart';
+
+/// Drive API 用の認可ヘッダを供給する。
+///
+/// `google_sign_in` への依存を [DriveUploader] から切り離すための注入点。
+/// 認可が取れない場合は `null` を返す。
+typedef AuthHeadersProvider = Future<Map<String, String>?> Function();
+
 /// Uploads captured photos to a dedicated "FarmCameraPOC" folder in the
 /// signed-in user's Google Drive, using the `drive.file` scope so the app
 /// only ever sees files/folders it created itself.
-class DriveUploader {
-  DriveUploader({this.folderName = 'FarmCameraPOC'});
+class DriveUploader implements PhotoUploader {
+  DriveUploader({
+    required this.authHeadersProvider,
+    this.folderName = 'FarmCameraPOC',
+    http.Client? httpClient,
+  }) : _http = httpClient ?? http.Client();
 
+  final AuthHeadersProvider authHeadersProvider;
   final String folderName;
+  final http.Client _http;
+
   static const _folderIdPrefsKey = 'driveFolderId';
 
-  Future<void> uploadFile(File file, Map<String, String> authHeaders) async {
+  @override
+  Future<void> upload(File file) async {
+    final authHeaders = await authHeadersProvider();
+    if (authHeaders == null) {
+      throw Exception('Drive認可を取得できませんでした。');
+    }
+
     final folderId = await _ensureFolderId(authHeaders);
     final bytes = await file.readAsBytes();
     final fileName = file.uri.pathSegments.last;
@@ -35,7 +56,7 @@ class DriveUploader {
     body.add(bytes);
     addText('\r\n--$boundary--');
 
-    final response = await http.post(
+    final response = await _http.post(
       Uri.parse(
         'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
       ),
@@ -68,7 +89,7 @@ class DriveUploader {
         'fields': 'files(id,name)',
       },
     );
-    final searchRes = await http.get(searchUri, headers: authHeaders);
+    final searchRes = await _http.get(searchUri, headers: authHeaders);
     if (searchRes.statusCode == 200) {
       final data = jsonDecode(searchRes.body) as Map<String, dynamic>;
       final files = data['files'] as List<dynamic>;
@@ -79,7 +100,7 @@ class DriveUploader {
       }
     }
 
-    final createRes = await http.post(
+    final createRes = await _http.post(
       Uri.parse('https://www.googleapis.com/drive/v3/files'),
       headers: {...authHeaders, 'Content-Type': 'application/json'},
       body: jsonEncode({
