@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'capture_naming.dart';
+import 'photo_record.dart';
 import 'photo_uploader.dart';
 import 'wake_lock.dart';
 
@@ -34,8 +35,11 @@ class CaptureSession extends ChangeNotifier {
     this.cameraId = 'CAM001',
     this.now = DateTime.now,
     this.wakeLock = const NoopWakeLock(),
+    PhotoRecordStore? recordStore,
+    this.maxRecords = 100,
     Duration initialInterval = const Duration(minutes: 1),
-  }) : _interval = initialInterval;
+  })  : _interval = initialInterval,
+        recordStore = recordStore ?? InMemoryPhotoRecordStore();
 
   final PhotoCapturer capturer;
   final PhotoUploader uploader;
@@ -44,6 +48,12 @@ class CaptureSession extends ChangeNotifier {
 
   /// 撮影中の画面スリープ抑止（#6）。既定は何もしない。
   final WakeLock wakeLock;
+
+  /// 撮影記録の保存先（#4）。既定は永続化しないインメモリ実装。
+  final PhotoRecordStore recordStore;
+
+  /// 保持する記録の上限。超過ぶんは古い**送信済み**から捨てる。
+  final int maxRecords;
 
   Duration _interval;
   bool _isRunning = false;
@@ -55,6 +65,7 @@ class CaptureSession extends ChangeNotifier {
   int _sentCount = 0;
   DateTime? _lastSentAt;
   String? _lastError;
+  List<PhotoRecord> _records = <PhotoRecord>[];
 
   Duration get interval => _interval;
   bool get isRunning => _isRunning;
@@ -62,6 +73,9 @@ class CaptureSession extends ChangeNotifier {
   int get sentCount => _sentCount;
   DateTime? get lastSentAt => _lastSentAt;
   String? get lastError => _lastError;
+
+  /// 撮影記録。新しいものが先頭（#4 の一覧表示用）。
+  List<PhotoRecord> get records => List<PhotoRecord>.unmodifiable(_records);
 
   bool get isSignedIn => _isSignedIn;
   set isSignedIn(bool value) {
@@ -119,10 +133,13 @@ class CaptureSession extends ChangeNotifier {
   Future<void> captureOnce() async {
     if (!_isRunning || _isCapturing) return;
 
+    final at = now();
+    final fileName = buildPhotoFileName(cameraId, at);
+
     final File saved;
     _isCapturing = true;
     try {
-      saved = await capturer(buildPhotoFileName(cameraId, now()));
+      saved = await capturer(fileName);
     } catch (e) {
       _lastError = '撮影に失敗しました: $e';
       _notify();
@@ -133,7 +150,11 @@ class CaptureSession extends ChangeNotifier {
     }
 
     _capturedCount++;
+    _addRecord(
+      PhotoRecord(fileName: fileName, fieldId: cameraId, capturedAt: at),
+    );
     _notify();
+    await _persistRecords();
 
     try {
       await uploader.upload(saved);
@@ -141,15 +162,68 @@ class CaptureSession extends ChangeNotifier {
       // 送信に失敗してもローカルファイルは残す。未送信データを失わないため
       // （risk-assessment.md「追加合意」2）。撮影自体は継続する。
       _lastError = '送信に失敗しました: $e';
+      _updateRecord(fileName, PhotoSendState.failed);
       _notify();
+      await _persistRecords();
       return;
     }
 
     _sentCount++;
     _lastSentAt = now();
     _lastError = null;
+    _updateRecord(fileName, PhotoSendState.sent);
+    _notify();
+    await _persistRecords();
+  }
+
+  /// 保存済みの撮影記録を読み直す（#4）。起動時に一度だけ呼ぶ想定。
+  Future<void> restoreRecords() async {
+    _records = await recordStore.load();
     _notify();
   }
+
+  void _addRecord(PhotoRecord record) {
+    _records = <PhotoRecord>[record, ..._records];
+    _prune();
+  }
+
+  void _updateRecord(String fileName, PhotoSendState state) {
+    _records = _records
+        .map((r) => r.fileName == fileName ? r.withState(state) : r)
+        .toList();
+  }
+
+  /// 上限超過ぶんを古い**送信済み**から捨てる。
+  ///
+  /// 未送信・送信失敗は捨てない。送信できていない写真こそ追跡が要るためで、
+  /// ここを落とすと端末に残っているファイルが履歴から消え、再送のきっかけ
+  /// （#19）が失われる。そのぶん、送信できない状態が続くと記録は上限を超えて
+  /// 増え続ける。容量警告は今回のスコープ外（`AGENTS.md` 3節）。
+  void _prune() {
+    var over = _records.length - maxRecords;
+    if (over <= 0) return;
+    final kept = <PhotoRecord>[];
+    for (final r in _records.reversed) {
+      if (over > 0 && r.state == PhotoSendState.sent) {
+        over--;
+        continue;
+      }
+      kept.add(r);
+    }
+    _records = kept.reversed.toList();
+  }
+
+  /// 履歴の保存に失敗しても撮影・送信は止めない。写真ファイル自体は端末に
+  /// あるため、失われるのは一覧表示だけで復旧の余地がある。
+  Future<void> _persistRecords() async {
+    try {
+      await recordStore.save(_records);
+    } catch (e) {
+      _lastError = '撮影履歴を保存できませんでした: $e';
+      _notify();
+    }
+  }
+
 
   /// dispose 後に飛んでくる非同期の完了通知を握りつぶす。
   ///

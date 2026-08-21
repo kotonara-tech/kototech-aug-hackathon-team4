@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:farmcamera/auth_gateway.dart';
 import 'package:farmcamera/main.dart';
 import 'package:farmcamera/photo_source.dart';
+import 'package:farmcamera/photo_record.dart';
 import 'package:farmcamera/photo_uploader.dart';
 import 'package:farmcamera/wake_lock.dart';
 import 'package:flutter/material.dart';
@@ -91,9 +92,13 @@ class _FakeWakeLock implements WakeLock {
 
 class _FakeUploader implements PhotoUploader {
   final List<File> uploaded = <File>[];
+  bool shouldFail = false;
 
   @override
-  Future<void> upload(File file) async => uploaded.add(file);
+  Future<void> upload(File file) async {
+    if (shouldFail) throw Exception('network down');
+    uploaded.add(file);
+  }
 }
 
 void main() {
@@ -102,6 +107,7 @@ void main() {
   late _FakeAuthGateway auth;
   late _FakeUploader uploader;
   late _FakeWakeLock wakeLock;
+  late InMemoryPhotoRecordStore recordStore;
 
   setUp(() {
     tempDir = Directory.systemTemp.createTempSync('capture_screen_test');
@@ -109,6 +115,7 @@ void main() {
     auth = _FakeAuthGateway();
     uploader = _FakeUploader();
     wakeLock = _FakeWakeLock();
+    recordStore = InMemoryPhotoRecordStore();
   });
 
   tearDown(() {
@@ -127,6 +134,7 @@ void main() {
         auth: auth,
         uploader: uploader,
         wakeLock: wakeLock,
+        recordStore: recordStore,
       ),
     );
     await tester.pumpAndSettle();
@@ -377,5 +385,60 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(wakeLock.isEnabled, isFalse, reason: '端末が眠れないままになるのを防ぐ');
+  });
+
+  testWidgets('撮影前は履歴が空であることが分かる（#4）', (tester) async {
+    await pumpScreen(tester);
+
+    expect(find.text('まだ撮影していません'), findsOneWidget);
+  });
+
+  testWidgets('撮影すると履歴に圃場ID・撮影日時・送信状態が出る（#4）', (tester) async {
+    await pumpScreen(tester);
+    await tester.tap(find.text('Googleでサインイン'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('開始'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('まだ撮影していません'), findsNothing);
+    expect(find.textContaining(source.captured.single), findsOneWidget,
+        reason: '撮影したファイル名が履歴に出る');
+    expect(find.textContaining('圃場ID: CAM001'), findsOneWidget);
+    expect(find.text('送信済み'), findsOneWidget);
+
+    await tester.tap(find.text('停止'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('送信に失敗した写真は履歴に送信失敗として残る（#4）', (tester) async {
+    // 端末にファイルは残っているので、あとから追えないと再送のきっかけを失う。
+    uploader.shouldFail = true;
+    await pumpScreen(tester);
+    await tester.tap(find.text('Googleでサインイン'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('開始'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('送信失敗'), findsOneWidget);
+    expect(find.text('送信済み'), findsNothing);
+
+    await tester.tap(find.text('停止'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('前回起動時の履歴が起動時に復元される（#4）', (tester) async {
+    await recordStore.save(<PhotoRecord>[
+      PhotoRecord(
+        fileName: 'CAM001_20260820_090000.jpg',
+        fieldId: 'CAM001',
+        capturedAt: DateTime(2026, 8, 20, 9),
+        state: PhotoSendState.failed,
+      ),
+    ]);
+
+    await pumpScreen(tester);
+
+    expect(find.textContaining('CAM001_20260820_090000.jpg'), findsOneWidget);
+    expect(find.text('送信失敗'), findsOneWidget);
   });
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:farmcamera/capture_session.dart';
+import 'package:farmcamera/photo_record.dart';
 import 'package:farmcamera/photo_uploader.dart';
 import 'package:farmcamera/wake_lock.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -50,6 +51,16 @@ class _FakeUploader implements PhotoUploader {
   }
 }
 
+/// 履歴の保存に必ず失敗するフェイク。端末の空き容量不足などを模す。
+class _ThrowingRecordStore implements PhotoRecordStore {
+  @override
+  Future<List<PhotoRecord>> load() async => <PhotoRecord>[];
+
+  @override
+  Future<void> save(List<PhotoRecord> records) async =>
+      throw Exception('disk full');
+}
+
 class _FakeWakeLock implements WakeLock {
   /// 呼び出しの履歴。true=有効化 / false=解除。順序も検証したいので配列で持つ。
   final List<bool> calls = <bool>[];
@@ -73,6 +84,7 @@ void main() {
   late _FakeCapturer capturer;
   late _FakeUploader uploader;
   late _FakeWakeLock wakeLock;
+  late InMemoryPhotoRecordStore recordStore;
   late DateTime now;
   late CaptureSession session;
 
@@ -81,11 +93,13 @@ void main() {
     capturer = _FakeCapturer(tempDir);
     uploader = _FakeUploader();
     wakeLock = _FakeWakeLock();
+    recordStore = InMemoryPhotoRecordStore();
     now = DateTime(2026, 8, 21, 14, 5, 9);
     session = CaptureSession(
       capturer: capturer.call,
       uploader: uploader,
       wakeLock: wakeLock,
+      recordStore: recordStore,
       now: () => now,
     );
   });
@@ -472,5 +486,151 @@ void main() {
       expect(session.lastError, isNotNull);
       expect(session.lastError, contains('スリープ'));
     });
+  });
+
+  group('撮影記録の保存（#4 / STEP3）', () {
+    test('撮影すると圃場ID・撮影日時つきで記録される', () async {
+      session.isSignedIn = true;
+      session.start();
+      await session.captureOnce();
+
+      final r = session.records.single;
+      expect(r.fileName, 'CAM001_20260821_140509.jpg');
+      expect(r.fieldId, 'CAM001');
+      expect(r.capturedAt, now);
+    });
+
+    test('送信に成功すると送信済みになる', () async {
+      session.isSignedIn = true;
+      session.start();
+      await session.captureOnce();
+
+      expect(session.records.single.state, PhotoSendState.sent);
+    });
+
+    test('送信に失敗すると送信失敗として残る', () async {
+      // 端末にファイルは残っているので、履歴から失敗を追える必要がある。
+      uploader.shouldFail = true;
+      session.isSignedIn = true;
+      session.start();
+      await session.captureOnce();
+
+      expect(session.records.single.state, PhotoSendState.failed);
+    });
+
+    test('撮影自体に失敗したら記録しない', () async {
+      capturer.shouldFail = true;
+      session.isSignedIn = true;
+      session.start();
+      await session.captureOnce();
+
+      expect(session.records, isEmpty, reason: '存在しない写真を履歴に出さない');
+    });
+
+    test('新しい記録が先頭に来る', () async {
+      session.isSignedIn = true;
+      session.start();
+      await session.captureOnce();
+      now = DateTime(2026, 8, 21, 14, 6, 9);
+      await session.captureOnce();
+
+      expect(session.records.map((r) => r.fileName), <String>[
+        'CAM001_20260821_140609.jpg',
+        'CAM001_20260821_140509.jpg',
+      ]);
+    });
+
+    test('記録は永続化され、次回起動時に復元できる', () async {
+      session.isSignedIn = true;
+      session.start();
+      await session.captureOnce();
+
+      // アプリ再起動を模して、同じ保存先から別セッションを作る。
+      final revived = CaptureSession(
+        capturer: capturer.call,
+        uploader: uploader,
+        recordStore: recordStore,
+        now: () => now,
+      );
+      addTearDown(revived.dispose);
+      await revived.restoreRecords();
+
+      expect(revived.records.single.fileName, 'CAM001_20260821_140509.jpg');
+      expect(revived.records.single.state, PhotoSendState.sent);
+    });
+
+    test('上限を超えたら古い送信済みから捨てる', () async {
+      final limited = CaptureSession(
+        capturer: capturer.call,
+        uploader: uploader,
+        recordStore: recordStore,
+        now: () => now,
+        maxRecords: 2,
+      );
+      addTearDown(limited.dispose);
+      limited.isSignedIn = true;
+      limited.start();
+
+      for (var i = 0; i < 3; i++) {
+        now = DateTime(2026, 8, 21, 14, 5 + i, 9);
+        await limited.captureOnce();
+      }
+
+      expect(limited.records, hasLength(2));
+      expect(limited.records.map((r) => r.fileName), <String>[
+        'CAM001_20260821_140709.jpg',
+        'CAM001_20260821_140609.jpg',
+      ]);
+    });
+
+    test('上限を超えても未送信・送信失敗は捨てない', () async {
+      // 送信できていない写真こそ追跡が要る。ここを落とすと、端末に残っている
+      // ファイルが履歴から消えて再送のきっかけが失われる（#19）。
+      final limited = CaptureSession(
+        capturer: capturer.call,
+        uploader: uploader,
+        recordStore: recordStore,
+        now: () => now,
+        maxRecords: 2,
+      );
+      addTearDown(limited.dispose);
+      limited.isSignedIn = true;
+      limited.start();
+
+      uploader.shouldFail = true;
+      await limited.captureOnce();
+
+      uploader.shouldFail = false;
+      for (var i = 1; i < 4; i++) {
+        now = DateTime(2026, 8, 21, 14, 5 + i, 9);
+        await limited.captureOnce();
+      }
+
+      final failed = limited.records
+          .where((r) => r.state == PhotoSendState.failed)
+          .toList();
+      expect(failed, hasLength(1), reason: '送信失敗の記録は上限を超えても残す');
+      expect(failed.single.fileName, 'CAM001_20260821_140509.jpg');
+    });
+  });
+
+  test('履歴の保存に失敗しても撮影・送信は続き、エラーはステータスに残る', () async {
+    // 写真ファイル自体は端末にあるので、失われるのは一覧表示だけ。
+    // ここで撮影を止めるほうが損失が大きい。
+    final session = CaptureSession(
+      capturer: capturer.call,
+      uploader: uploader,
+      recordStore: _ThrowingRecordStore(),
+      now: () => now,
+    );
+    addTearDown(session.dispose);
+    session.isSignedIn = true;
+    session.start();
+
+    await session.captureOnce();
+
+    expect(session.capturedCount, 1);
+    expect(session.sentCount, 1, reason: '履歴の失敗で送信まで止めない');
+    expect(session.lastError, contains('撮影履歴'));
   });
 }
