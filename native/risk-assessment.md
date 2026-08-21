@@ -269,18 +269,18 @@ Androidにはカメラ用途を宣言したフォアグラウンドサービス�
 最終的な提供形態は **Androidアプリケーション** とする。クロスプラットフォームのFlutterを採用しつつ、当面のビルド・配布対象はAndroidに限定し、iOS対応は行わない（技術セクションの「クロスプラットフォーム方針」で挙げたOS依存差分の吸収設計はそのまま活用できるため、将来iOS展開が必要になった場合の拡張コストは抑えられる）。
 
 ### リポジトリとissue駆動開発
-- GitHubリポジトリ: `kotonarahackathon`（Private）としてセットアップ済み。
+- GitHubリポジトリ: `kotonara-tech/kototech-aug-hackathon-team4`（**Public**）としてセットアップ済み。公開リポジトリのため、APIキー・OAuthクライアントシークレット・`google-services.json` などの機密情報はコミットしない（`AGENTS.md` 6節のとおり、Google認証はGCPコンソール側にapplicationIdと署名SHA-1を登録する方式を採り、リポジトリに秘匿ファイルを置かない設計にしている）。
 - 実装はSTEP単位でGitHub Issue化し、issue駆動で進める。
-  - STEP0: プロジェクトセットアップ（Flutter create, .gitignore, AGENTS.md, README）
-  - STEP1: カメラ権限取得とアプリ内カメラ画面
-  - STEP2: 定点撮影の開始/停止操作と撮影間隔設定
-  - STEP3: 端末内への写真・圃場ID・撮影日時の保存
-  - STEP4: アップロード機能（送信先未定のためインターフェース化）と失敗時の再送キュー
-  - STEP5: 撮影中の画面スリープ抑止
-  - STEP6: 前面復帰時のカメラセッション再初期化・中断時の状態表示
-  - STEP7: デバッグAPKビルドと動作確認（ハッカソン配布用）
-  - future: Google認証の追加（`google_sign_in`等、初回のみ認証+自動ログイン方針）
-  - future: カメラのトーチ（ライト）制御（`camera`パッケージの`setFlashMode`、早朝夕方対応）
+  - STEP0 (#1): プロジェクトセットアップ（Flutter create, .gitignore, AGENTS.md, README）
+  - STEP1 (#2): カメラ権限取得とアプリ内カメラ画面
+  - STEP2 (#3): 定点撮影の開始/停止操作と撮影間隔設定
+  - STEP3 (#4): 端末内への写真・圃場ID・撮影日時の保存
+  - STEP4 (#5): アップロード機能（送信先未定のためインターフェース化）と失敗時の再送キュー
+  - STEP5 (#6): 撮影中の画面スリープ抑止
+  - STEP6 (#7): 前面復帰時のカメラセッション再初期化・中断時の状態表示
+  - STEP7 (#8): デバッグAPKビルドと動作確認（ハッカソン配布用）
+  - future (#9): Google認証の追加（`google_sign_in`等、初回のみ認証+自動ログイン方針）
+  - future (#10): カメラのトーチ（ライト）制御（`camera`パッケージの`setFlashMode`、早朝夕方対応）
 
 ### HTMLプロトタイプによる事前検証
 Flutter実装に入る前に、ブラウザで動く単体HTMLプロトタイプ（`prototype/teiten-mvp-preview.html`）を作成し、UI/状態遷移を検証済み。検証済みの挙動は以下の通り。
