@@ -29,18 +29,31 @@ void main() {
   });
 
   /// Drive API のフェイク。
-  /// [existingFolderId] が null なら「フォルダ未作成」として振る舞う。
+  ///
+  /// - [existingFolderId] が null なら「フォルダ未作成」として振る舞う
+  /// - [createdFolderIds] は作成APIが返すIDを先頭から順に払い出す（尽きたら最後の値）
+  /// - [goneFolderIds] に含まれるフォルダを親に指定したアップロードは [goneStatus] を
+  ///   返す。利用者が Drive 上でフォルダを消した状況を再現する。可変 Set を渡せば
+  ///   「1回目は成功、そのあと消された」を表現できる
   MockClient buildClient({
     String? existingFolderId,
-    String createdFolderId = 'created-folder-id',
+    List<String> createdFolderIds = const <String>['created-folder-id'],
     int uploadStatus = 200,
     int createStatus = 200,
+    Set<String>? goneFolderIds,
+    int goneStatus = 404,
   }) {
+    final gone = goneFolderIds ?? <String>{};
+    var createCount = 0;
     return MockClient((request) async {
       requests.add(request);
       final isUpload = request.url.path.startsWith('/upload/');
 
       if (isUpload) {
+        final body = utf8.decode(request.bodyBytes, allowMalformed: true);
+        if (gone.any((id) => body.contains('"parents":["$id"]'))) {
+          return http.Response('{"error":{"code":$goneStatus}}', goneStatus);
+        }
         return http.Response('{"id":"file-1"}', uploadStatus);
       }
       if (request.method == 'GET') {
@@ -52,19 +65,40 @@ void main() {
         return http.Response(jsonEncode({'files': files}), 200);
       }
       // フォルダ作成
-      return http.Response(jsonEncode({'id': createdFolderId}), createStatus);
+      final index = createCount < createdFolderIds.length
+          ? createCount
+          : createdFolderIds.length - 1;
+      createCount++;
+      return http.Response(jsonEncode({'id': createdFolderIds[index]}), createStatus);
     });
   }
 
   DriveUploader buildUploader(
     MockClient client, {
     Map<String, String>? headers = _authHeaders,
+    String? accountId = 'tester@example.com',
   }) {
     return DriveUploader(
       authHeadersProvider: () async => headers,
+      accountIdProvider: () => accountId,
       httpClient: client,
     );
   }
+
+  /// 直近のアップロードリクエストが指定した親フォルダへ送られたか。
+  void expectUploadedTo(String folderId) {
+    final uploads = requests.where((r) => r.url.path.startsWith('/upload/'));
+    expect(
+      utf8.decode(uploads.last.bodyBytes, allowMalformed: true),
+      contains('"parents":["$folderId"]'),
+    );
+  }
+
+  Iterable<http.Request> uploadsOf() =>
+      requests.where((r) => r.url.path.startsWith('/upload/'));
+  Iterable<http.Request> createsOf() => requests.where(
+        (r) => r.method == 'POST' && !r.url.path.startsWith('/upload/'),
+      );
 
   test('フォルダが無ければ FarmCameraPOC を作成し、その配下へ送信する（AGENTS.md 5.3）', () async {
     await buildUploader(buildClient()).upload(photo);
@@ -192,5 +226,116 @@ void main() {
       ),
       contains('"parents":["created-folder-id"]'),
     );
+  });
+
+  // --- #33: キャッシュしたフォルダIDが無効になった場合 ---------------------
+
+  test('キャッシュ済みフォルダが消えていたら（404）解決し直して同じ送信の中で再送する', () async {
+    // 利用者が Drive 上で FarmCameraPOC をゴミ箱へ入れた状況。
+    // キャッシュを信じ続けると再インストールするまで送信が通らなくなる。
+    final gone = <String>{};
+    final uploader = buildUploader(
+      buildClient(createdFolderIds: ['folder-1', 'folder-2'], goneFolderIds: gone),
+    );
+    await uploader.upload(photo);
+    gone.add('folder-1');
+    requests.clear();
+
+    await uploader.upload(photo); // 例外を投げずに完了すること
+
+    expect(uploadsOf(), hasLength(2), reason: '404の1回と、やり直しの1回');
+    expect(createsOf(), hasLength(1), reason: 'キャッシュを捨てて作り直す');
+    expectUploadedTo('folder-2');
+  });
+
+  test('403 でも同じようにキャッシュを捨ててやり直す', () async {
+    final gone = <String>{};
+    final uploader = buildUploader(
+      buildClient(
+        createdFolderIds: ['folder-1', 'folder-2'],
+        goneFolderIds: gone,
+        goneStatus: 403,
+      ),
+    );
+    await uploader.upload(photo);
+    gone.add('folder-1');
+    requests.clear();
+
+    await uploader.upload(photo);
+
+    expectUploadedTo('folder-2');
+  });
+
+  test('やり直しは1回だけ。2回目も失敗するなら例外を投げる', () async {
+    // 作り直しても同じIDが返る＝原因がフォルダ以外にある状況。
+    // 際限なくやり直すと1分間隔の撮影に追いつけなくなる。
+    final uploader = buildUploader(
+      buildClient(createdFolderIds: ['folder-1'], goneFolderIds: {'folder-1'}),
+    );
+
+    await expectLater(uploader.upload(photo), throwsA(isA<Exception>()));
+
+    expect(uploadsOf(), hasLength(2), reason: '初回とやり直しの計2回で打ち切る');
+    expect(photo.existsSync(), isTrue, reason: '失敗時もローカルファイルは残す');
+  });
+
+  test('やり直して成功したフォルダIDが次回に引き継がれる', () async {
+    final gone = <String>{};
+    final uploader = buildUploader(
+      buildClient(createdFolderIds: ['folder-1', 'folder-2'], goneFolderIds: gone),
+    );
+    await uploader.upload(photo);
+    gone.add('folder-1');
+    await uploader.upload(photo);
+    requests.clear();
+
+    await uploader.upload(photo);
+
+    expect(createsOf(), isEmpty, reason: 'やり直しの結果もキャッシュされること');
+    expect(uploadsOf(), hasLength(1), reason: '3回目は一発で通る');
+    expectUploadedTo('folder-2');
+  });
+
+  test('別アカウントでサインインしたら前アカウントのフォルダIDを使わない', () async {
+    // drive.file スコープでは他アカウントのファイルは見えないため、
+    // 前のIDを送り続けると404が出続ける。キャッシュはアカウント単位で持つ。
+    await buildUploader(
+      buildClient(createdFolderIds: ['folder-a']),
+      accountId: 'a@example.com',
+    ).upload(photo);
+    requests.clear();
+
+    await buildUploader(
+      buildClient(createdFolderIds: ['folder-b']),
+      accountId: 'b@example.com',
+    ).upload(photo);
+
+    expect(createsOf(), hasLength(1), reason: '別アカウントでは自分のフォルダを作る');
+    expectUploadedTo('folder-b');
+  });
+
+  test('同じアカウントに戻ればキャッシュを再利用する', () async {
+    await buildUploader(
+      buildClient(createdFolderIds: ['folder-a']),
+      accountId: 'a@example.com',
+    ).upload(photo);
+    await buildUploader(
+      buildClient(createdFolderIds: ['folder-b']),
+      accountId: 'b@example.com',
+    ).upload(photo);
+    requests.clear();
+
+    await buildUploader(buildClient(), accountId: 'a@example.com').upload(photo);
+
+    expect(createsOf(), isEmpty, reason: 'アカウントAのIDは消さずに保持しておくこと');
+    expectUploadedTo('folder-a');
+  });
+
+  test('アカウントを識別できなければ送信を試みずに例外を投げる', () async {
+    // 識別子が無いままキャッシュすると全アカウントで同じ鍵を共有してしまう。
+    final uploader = buildUploader(buildClient(), accountId: null);
+
+    await expectLater(uploader.upload(photo), throwsA(isA<Exception>()));
+    expect(requests, isEmpty);
   });
 }

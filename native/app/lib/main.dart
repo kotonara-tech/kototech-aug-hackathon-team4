@@ -104,7 +104,10 @@ class _CaptureScreenState extends State<CaptureScreen> {
     _session = CaptureSession(
       capturer: widget.source.capture,
       uploader: widget.uploader ??
-          DriveUploader(authHeadersProvider: widget.auth.authHeaders),
+          DriveUploader(
+            authHeadersProvider: widget.auth.authHeaders,
+            accountIdProvider: () => widget.auth.email,
+          ),
       wakeLock: widget.wakeLock ?? const ScreenWakeLock(),
       recordStore:
           widget.recordStore ?? SharedPreferencesPhotoRecordStore(),
