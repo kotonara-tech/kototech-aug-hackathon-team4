@@ -16,12 +16,45 @@
 
 ```bash
 flutter pub get
-flutter test          # 55件
+flutter test          # 61件
 flutter analyze
 flutter run           # 実機接続時
 ```
 
+カバレッジは下記「カバレッジ」節を参照してください。
+
 テストが `The Dart compiler exited unexpectedly` で落ちたときは、フレークではなく**本物のコンパイルエラー**です。`BUILD_NOTES.md` 3節を参照してください。
+
+## カバレッジ
+
+```bash
+flutter test --coverage      # coverage/lcov.info が出る
+```
+
+実測値（61件のテスト）:
+
+| ファイル | 行カバレッジ |
+|---|---|
+| `capture_session.dart` | 100.0% (52/52) |
+| `capture_scheduler.dart` | 100.0% (9/9) |
+| `capture_naming.dart` | 100.0% (5/5) |
+| `drive_uploader.dart` | 98.0% (50/51) |
+| `main.dart` | 93.1% (94/101) |
+| `auth_gateway.dart` | **0.0%** (0/13) |
+| `photo_source.dart` | **0.0%** (0/31) |
+| 全体 | 80.2% (210/262) |
+
+### 0% を放置している理由
+
+`auth_gateway.dart` と `photo_source.dart` は `google_sign_in` / `camera` / `permission_handler` のプラットフォームチャネルを叩く**薄いアダプタ**で、ホスト側のテストでは実行できません。**ロジックを持たせず抽象の裏に押し出した結果**であり、設計どおりです。
+
+ただし **0% は「誰も検証していない」という意味でもあります。** 端末固有の不具合はここに出るため、検証は実機確認（#8）が担います。カバレッジの数字だけを見て安心しないでください。
+
+残る未到達行は `main()` と `DriveUploader` の既定インスタンス生成、つまり**組み立て（composition root）だけ**です。分岐や判断を含まないため、テストで到達させる価値がありません。
+
+### 数字を目的にしない
+
+カバレッジは「まだ見ていない場所」を探す道具として使っています。追加したテストが実際に効いているかは、**わざとコードを壊して落ちることを確認**して担保します（#26 で実施）。
 
 ## 構成
 

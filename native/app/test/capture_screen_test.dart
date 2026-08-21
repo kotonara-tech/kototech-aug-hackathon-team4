@@ -15,6 +15,13 @@ class _FakePhotoSource implements PhotoSource {
   String? initError;
   final List<String> captured = <String>[];
 
+  /// `initialize()` が呼ばれた回数。再試行が実際に再初期化を走らせたかを見る。
+  int initializeCount = 0;
+
+  /// 次の `initialize()` で権限が許可された状況を再現する。
+  /// （端末設定で権限を付け直してからアプリに戻ってきた場合）
+  bool recoversOnNextInitialize = false;
+
   @override
   bool get isReady => ready && initError == null;
 
@@ -22,7 +29,13 @@ class _FakePhotoSource implements PhotoSource {
   String? get errorMessage => initError;
 
   @override
-  Future<void> initialize() async {}
+  Future<void> initialize() async {
+    initializeCount++;
+    if (recoversOnNextInitialize) {
+      initError = null;
+      recoversOnNextInitialize = false;
+    }
+  }
 
   @override
   Future<File> capture(String fileName) async {
@@ -246,5 +259,74 @@ void main() {
       ],
     );
     expect(dropdown.value, const Duration(minutes: 1), reason: '既定は1分');
+  });
+
+  testWidgets('再試行を押すとカメラを初期化し直し、回復すればプレビューが出る', (tester) async {
+    // 権限を一度拒否したあと、端末設定で許可して戻ってきた状況。ここで復帰
+    // できないと、アプリを入れ直す以外に手が無くなる。
+    source.initError = 'カメラ権限が許可されていません。';
+    await pumpScreen(tester);
+    expect(find.byKey(const Key('preview')), findsNothing);
+    final before = source.initializeCount;
+
+    source.recoversOnNextInitialize = true;
+    await tester.tap(find.text('再試行'));
+    await tester.pumpAndSettle();
+
+    expect(source.initializeCount, before + 1, reason: '再初期化を実際に呼ぶこと');
+    expect(find.byKey(const Key('preview')), findsOneWidget);
+    expect(find.text('再試行'), findsNothing, reason: '回復したらエラー表示は消える');
+  });
+
+  testWidgets('再試行しても回復しなければエラー表示のまま再試行できる', (tester) async {
+    source.initError = 'カメラ権限が許可されていません。';
+    await pumpScreen(tester);
+
+    await tester.tap(find.text('再試行'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('カメラ権限が許可されていません。'), findsOneWidget);
+    expect(find.text('再試行'), findsOneWidget, reason: '何度でも試せること');
+  });
+
+  testWidgets('撮影間隔を選ぶと選択が反映される', (tester) async {
+    await pumpScreen(tester);
+
+    await tester.tap(find.byType(DropdownButton<Duration>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('10分').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<DropdownButton<Duration>>(find.byType(DropdownButton<Duration>)).value,
+      const Duration(minutes: 10),
+    );
+  });
+
+  testWidgets('選んだ撮影間隔でタイマーが動く（既定の1分のままにならない）', (tester) async {
+    await pumpScreen(tester);
+    await tester.tap(find.text('Googleでサインイン'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButton<Duration>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('5分').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('開始'));
+    await tester.pumpAndSettle();
+    expect(source.captured, hasLength(1), reason: '開始直後の1枚');
+
+    // 1分では撮らない。ここで2枚目が出るなら選択がタイマーに届いていない。
+    await tester.pump(const Duration(minutes: 1));
+    await tester.pumpAndSettle();
+    expect(source.captured, hasLength(1));
+
+    await tester.pump(const Duration(minutes: 4));
+    await tester.pumpAndSettle();
+    expect(source.captured, hasLength(2), reason: '5分経過で2枚目');
+
+    await tester.tap(find.text('停止'));
+    await tester.pumpAndSettle();
   });
 }

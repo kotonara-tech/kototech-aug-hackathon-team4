@@ -34,6 +34,7 @@ void main() {
     String? existingFolderId,
     String createdFolderId = 'created-folder-id',
     int uploadStatus = 200,
+    int createStatus = 200,
   }) {
     return MockClient((request) async {
       requests.add(request);
@@ -51,7 +52,7 @@ void main() {
         return http.Response(jsonEncode({'files': files}), 200);
       }
       // フォルダ作成
-      return http.Response(jsonEncode({'id': createdFolderId}), 200);
+      return http.Response(jsonEncode({'id': createdFolderId}), createStatus);
     });
   }
 
@@ -155,5 +156,41 @@ void main() {
     for (final r in requests) {
       expect(r.headers['Authorization'], 'Bearer test-token');
     }
+  });
+
+  test('フォルダ作成に失敗したらアップロードを試みずに例外を投げる', () async {
+    // 圃場は電波が悪い（risk-assessment.md 反対2）。初回送信でフォルダ作成が
+    // 失敗する状況は現実に起きる。ここで例外を投げずに進むと、親フォルダが
+    // 決まらないまま送信して静かに失われる。
+    final uploader = buildUploader(buildClient(createStatus: 500));
+
+    await expectLater(uploader.upload(photo), throwsA(isA<Exception>()));
+    expect(
+      requests.where((r) => r.url.path.startsWith('/upload/')),
+      isEmpty,
+      reason: '親フォルダが確定していないのに送信してはいけない',
+    );
+    expect(photo.existsSync(), isTrue, reason: '失敗時もローカルファイルは残す');
+  });
+
+  test('フォルダ作成に失敗したらIDをキャッシュせず、次回やり直す', () async {
+    final failing = buildUploader(buildClient(createStatus: 500));
+    await expectLater(failing.upload(photo), throwsA(isA<Exception>()));
+    requests.clear();
+
+    // 通信が回復した状況。壊れた値をキャッシュしていれば作成をやり直さない。
+    await buildUploader(buildClient()).upload(photo);
+
+    final creates = requests.where(
+      (r) => r.method == 'POST' && !r.url.path.startsWith('/upload/'),
+    );
+    expect(creates, hasLength(1), reason: '失敗を引きずらずフォルダ作成をやり直すこと');
+    expect(
+      utf8.decode(
+        requests.firstWhere((r) => r.url.path.startsWith('/upload/')).bodyBytes,
+        allowMalformed: true,
+      ),
+      contains('"parents":["created-folder-id"]'),
+    );
   });
 }
