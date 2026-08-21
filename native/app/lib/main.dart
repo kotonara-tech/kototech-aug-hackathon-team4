@@ -7,12 +7,13 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'capture_session.dart';
 import 'drive_uploader.dart';
 
 const _driveScopes = <String>['https://www.googleapis.com/auth/drive.file'];
-const _cameraId = 'CAM001';
 
-final _intervalOptions = <Duration, String>{
+// Duration は primitive equality を持たないため const マップのキーにできない。
+final _intervalLabels = <Duration, String>{
   Duration(minutes: 1): '1分',
   Duration(minutes: 5): '5分',
   Duration(minutes: 10): '10分',
@@ -37,6 +38,8 @@ class FarmCameraApp extends StatelessWidget {
   }
 }
 
+/// カメラ・認証という「実機がないと動かない部分」を担い、撮影の判断そのものは
+/// [CaptureSession] に委ねる薄い UI 層。周期実行の [Timer] もここが持つ。
 class CaptureScreen extends StatefulWidget {
   const CaptureScreen({super.key});
 
@@ -45,26 +48,22 @@ class CaptureScreen extends StatefulWidget {
 }
 
 class _CaptureScreenState extends State<CaptureScreen> {
-  final _driveUploader = DriveUploader();
+  late final CaptureSession _session;
 
   CameraController? _cameraController;
   String? _cameraError;
 
   GoogleSignInAccount? _account;
   bool _signingIn = false;
-
-  Duration _interval = _intervalOptions.keys.first;
-  bool _isRunning = false;
   Timer? _timer;
-
-  int _capturedCount = 0;
-  int _sentCount = 0;
-  DateTime? _lastSentAt;
-  String? _lastError;
 
   @override
   void initState() {
     super.initState();
+    _session = CaptureSession(
+      capturer: _capturePhoto,
+      uploader: DriveUploader(authHeadersProvider: _driveAuthHeaders),
+    );
     _bootstrap();
   }
 
@@ -106,92 +105,65 @@ class _CaptureScreenState extends State<CaptureScreen> {
     final account = await GoogleSignIn.instance.attemptLightweightAuthentication();
     if (!mounted) return;
     setState(() => _account = account);
+    _session.isSignedIn = account != null;
   }
 
   Future<void> _signIn() async {
     setState(() => _signingIn = true);
     try {
       final account = await GoogleSignIn.instance.authenticate(scopeHint: _driveScopes);
+      if (!mounted) return;
       setState(() => _account = account);
+      _session.isSignedIn = true;
     } catch (e) {
-      setState(() => _lastError = 'サインインに失敗しました: $e');
+      _showError('サインインに失敗しました: $e');
     } finally {
       if (mounted) setState(() => _signingIn = false);
     }
   }
 
+  Future<Map<String, String>?> _driveAuthHeaders() async {
+    final account = _account;
+    if (account == null) return null;
+    return account.authorizationClient.authorizationHeaders(
+      _driveScopes,
+      promptIfNecessary: true,
+    );
+  }
+
+  /// [CaptureSession] から呼ばれる撮影処理。指定された名前で端末内へ保存する。
+  Future<File> _capturePhoto(String fileName) async {
+    final controller = _cameraController;
+    if (controller == null || !controller.value.isInitialized) {
+      throw StateError('カメラが初期化されていません。');
+    }
+    final picture = await controller.takePicture();
+    final tempDir = await getTemporaryDirectory();
+    return File(picture.path).copy('${tempDir.path}/$fileName');
+  }
+
   void _startCapture() {
-    if (_isRunning || _cameraController == null || _account == null) return;
-    setState(() {
-      _isRunning = true;
-      _lastError = null;
-    });
-    _timer = Timer.periodic(_interval, (_) => _captureAndUpload());
-    unawaited(_captureAndUpload());
+    if (!_session.start()) return;
+    _timer = Timer.periodic(_session.interval, (_) => _session.captureOnce());
+    unawaited(_session.captureOnce());
   }
 
   void _stopCapture() {
     _timer?.cancel();
     _timer = null;
-    setState(() => _isRunning = false);
+    _session.stop();
   }
 
-  Future<void> _captureAndUpload() async {
-    final controller = _cameraController;
-    if (controller == null || !controller.value.isInitialized) return;
-    if (controller.value.isTakingPicture) return;
-
-    try {
-      final picture = await controller.takePicture();
-      final now = DateTime.now();
-      final fileName = '${_cameraId}_${_formatTimestamp(now)}.jpg';
-      final tempDir = await getTemporaryDirectory();
-      final savedFile = await File(picture.path).copy('${tempDir.path}/$fileName');
-
-      setState(() => _capturedCount++);
-
-      await _uploadFile(savedFile);
-    } catch (e) {
-      setState(() => _lastError = '撮影に失敗しました: $e');
-    }
-  }
-
-  Future<void> _uploadFile(File file) async {
-    final account = _account;
-    if (account == null) {
-      setState(() => _lastError = 'Googleアカウント未サインインのため送信できません。');
-      return;
-    }
-    try {
-      final headers = await account.authorizationClient.authorizationHeaders(
-        _driveScopes,
-        promptIfNecessary: true,
-      );
-      if (headers == null) {
-        setState(() => _lastError = 'Drive認可を取得できませんでした。');
-        return;
-      }
-      await _driveUploader.uploadFile(file, headers);
-      setState(() {
-        _sentCount++;
-        _lastSentAt = DateTime.now();
-        _lastError = null;
-      });
-    } catch (e) {
-      // 送信失敗時もファイルは端末に残したままにする（自動削除しない）。
-      setState(() => _lastError = '送信に失敗しました: $e');
-    }
-  }
-
-  String _formatTimestamp(DateTime t) {
-    String pad2(int n) => n.toString().padLeft(2, '0');
-    return '${t.year}${pad2(t.month)}${pad2(t.day)}_${pad2(t.hour)}${pad2(t.minute)}${pad2(t.second)}';
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   void dispose() {
     _timer?.cancel();
     _cameraController?.dispose();
+    _session.dispose();
     super.dispose();
   }
 
@@ -202,7 +174,13 @@ class _CaptureScreenState extends State<CaptureScreen> {
       body: Column(
         children: [
           Expanded(flex: 3, child: _buildCameraPreview()),
-          Expanded(flex: 2, child: _buildControls()),
+          Expanded(
+            flex: 2,
+            child: ListenableBuilder(
+              listenable: _session,
+              builder: (context, _) => _buildControls(),
+            ),
+          ),
         ],
       ),
     );
@@ -232,6 +210,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
   }
 
   Widget _buildControls() {
+    final canStart =
+        !_session.isRunning && _cameraController != null && _session.isSignedIn;
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -248,7 +228,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
               if (_account == null)
                 ElevatedButton(
                   onPressed: _signingIn ? null : _signIn,
-                  child: Text(_signingIn ? '接続中…' : 'Googleでサインイン'),
+                  child: Text(_signingIn ? '接続中' : 'Googleでサインイン'),
                 ),
             ],
           ),
@@ -258,35 +238,34 @@ class _CaptureScreenState extends State<CaptureScreen> {
               const Text('撮影間隔:'),
               const SizedBox(width: 8),
               DropdownButton<Duration>(
-                value: _interval,
-                items: _intervalOptions.entries
-                    .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                value: _session.interval,
+                items: kCaptureIntervals
+                    .map((d) =>
+                        DropdownMenuItem(value: d, child: Text(_intervalLabels[d]!)))
                     .toList(),
-                onChanged: _isRunning
+                onChanged: _session.isRunning
                     ? null
                     : (v) {
-                        if (v != null) setState(() => _interval = v);
+                        if (v != null) _session.setInterval(v);
                       },
               ),
               const Spacer(),
               ElevatedButton(
-                onPressed: _isRunning || _cameraController == null || _account == null
-                    ? null
-                    : _startCapture,
+                onPressed: canStart ? _startCapture : null,
                 child: const Text('開始'),
               ),
               const SizedBox(width: 8),
               ElevatedButton(
-                onPressed: _isRunning ? _stopCapture : null,
+                onPressed: _session.isRunning ? _stopCapture : null,
                 child: const Text('停止'),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Text('撮影枚数: $_capturedCount　送信枚数: $_sentCount'),
-          Text('最終送信: ${_lastSentAt?.toString() ?? '-'}'),
-          if (_lastError != null)
-            Text(_lastError!, style: const TextStyle(color: Colors.red)),
+          Text('撮影枚数: ${_session.capturedCount}  送信枚数: ${_session.sentCount}'),
+          Text('最終送信: ${_session.lastSentAt?.toString() ?? '-'}'),
+          if (_session.lastError != null)
+            Text(_session.lastError!, style: const TextStyle(color: Colors.red)),
         ],
       ),
     );
