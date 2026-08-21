@@ -4,6 +4,7 @@ import 'auth_gateway.dart';
 import 'capture_scheduler.dart';
 import 'capture_session.dart';
 import 'drive_uploader.dart';
+import 'photo_record.dart';
 import 'photo_source.dart';
 import 'photo_uploader.dart';
 import 'wake_lock.dart';
@@ -32,6 +33,7 @@ class FarmCameraApp extends StatelessWidget {
     required this.auth,
     this.uploader,
     this.wakeLock,
+    this.recordStore,
   });
 
   final PhotoSource source;
@@ -43,6 +45,9 @@ class FarmCameraApp extends StatelessWidget {
   /// 省略時は端末の画面スリープを抑止する。テストで差し替えるための口。
   final WakeLock? wakeLock;
 
+  /// 省略時は端末内（SharedPreferences）へ撮影記録を保存する。
+  final PhotoRecordStore? recordStore;
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -53,6 +58,7 @@ class FarmCameraApp extends StatelessWidget {
         auth: auth,
         uploader: uploader,
         wakeLock: wakeLock,
+        recordStore: recordStore,
       ),
     );
   }
@@ -69,6 +75,7 @@ class CaptureScreen extends StatefulWidget {
     required this.auth,
     this.uploader,
     this.wakeLock,
+    this.recordStore,
   });
 
   final PhotoSource source;
@@ -77,6 +84,9 @@ class CaptureScreen extends StatefulWidget {
 
   /// 省略時は端末の画面スリープを抑止する。テストで差し替えるための口。
   final WakeLock? wakeLock;
+
+  /// 省略時は端末内（SharedPreferences）へ撮影記録を保存する。
+  final PhotoRecordStore? recordStore;
 
   @override
   State<CaptureScreen> createState() => _CaptureScreenState();
@@ -96,11 +106,14 @@ class _CaptureScreenState extends State<CaptureScreen> {
       uploader: widget.uploader ??
           DriveUploader(authHeadersProvider: widget.auth.authHeaders),
       wakeLock: widget.wakeLock ?? const ScreenWakeLock(),
+      recordStore:
+          widget.recordStore ?? SharedPreferencesPhotoRecordStore(),
     );
     _bootstrap();
   }
 
   Future<void> _bootstrap() async {
+    await _session.restoreRecords();
     await widget.source.initialize();
     if (mounted) setState(() {});
 
@@ -191,9 +204,12 @@ class _CaptureScreenState extends State<CaptureScreen> {
   Widget _buildControls() {
     final email = widget.auth.email;
     final canStart = !_session.isRunning && widget.source.isReady && _session.isSignedIn;
-    return Padding(
+    // 縦に積むと小さい画面で溢れるため、パネル全体をスクロール可能にする。
+    // 履歴は高さを固定してその中でスクロールさせる（レイアウト全体の追従は #22）。
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
@@ -245,8 +261,58 @@ class _CaptureScreenState extends State<CaptureScreen> {
           Text('最終送信: ${_session.lastSentAt?.toString() ?? '-'}'),
           if (_session.lastError != null)
             Text(_session.lastError!, style: const TextStyle(color: Colors.red)),
+          const SizedBox(height: 12),
+          const Text('撮影履歴', style: TextStyle(fontWeight: FontWeight.bold)),
+          SizedBox(height: 180, child: _buildRecordList()),
         ],
       ),
     );
   }
+
+  /// 撮影履歴の一覧（#4）。新しいものが上に来る。
+  ///
+  /// `AGENTS.md` 5.1 が単一画面と定めているため、タブや別画面には分けず
+  /// ステータスパネルの下に置く（タブ分離・拡大ビューアは #4 のスコープ外）。
+  Widget _buildRecordList() {
+    final records = _session.records;
+    if (records.isEmpty) {
+      return const Center(child: Text('まだ撮影していません'));
+    }
+    return ListView.builder(
+      padding: EdgeInsets.zero,
+      itemCount: records.length,
+      itemBuilder: (context, i) {
+        final r = records[i];
+        return ListTile(
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          title: Text(r.fileName, overflow: TextOverflow.ellipsis),
+          subtitle: Text('圃場ID: ${r.fieldId}  撮影: ${_formatAt(r.capturedAt)}'),
+          trailing: Text(
+            _sendStateLabels[r.state]!,
+            style: TextStyle(color: _sendStateColors[r.state]),
+          ),
+        );
+      },
+    );
+  }
+}
+
+const _sendStateLabels = <PhotoSendState, String>{
+  PhotoSendState.pending: '未送信',
+  PhotoSendState.sent: '送信済み',
+  PhotoSendState.failed: '送信失敗',
+};
+
+const _sendStateColors = <PhotoSendState, Color>{
+  PhotoSendState.pending: Colors.grey,
+  PhotoSendState.sent: Colors.green,
+  PhotoSendState.failed: Colors.red,
+};
+
+/// 一覧に出す撮影日時。端末のローカル時刻をそのまま見せる。
+String _formatAt(DateTime at) {
+  String pad2(int n) => n.toString().padLeft(2, '0');
+  return '${at.year}-${pad2(at.month)}-${pad2(at.day)} '
+      '${pad2(at.hour)}:${pad2(at.minute)}:${pad2(at.second)}';
 }

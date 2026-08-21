@@ -16,7 +16,7 @@
 
 ```bash
 flutter pub get
-flutter test          # 70件
+flutter test          # 91件
 flutter analyze
 flutter run           # 実機接続時
 ```
@@ -31,19 +31,20 @@ flutter run           # 実機接続時
 flutter test --coverage      # coverage/lcov.info が出る
 ```
 
-実測値（70件のテスト）:
+実測値（91件のテスト）:
 
 | ファイル | 行カバレッジ |
 |---|---|
-| `capture_session.dart` | 100.0% (63/63) |
+| `photo_record.dart` | 100.0% (36/36) |
 | `capture_scheduler.dart` | 100.0% (9/9) |
 | `capture_naming.dart` | 100.0% (5/5) |
+| `capture_session.dart` | 99.0% (96/97) |
 | `drive_uploader.dart` | 98.0% (50/51) |
-| `main.dart` | 93.4% (99/106) |
-| `wake_lock.dart` | 25.0% (2/8) |
+| `main.dart` | 94.6% (122/129) |
+| `wake_lock.dart` | 50.0% (4/8) |
 | `auth_gateway.dart` | **0.0%** (0/13) |
 | `photo_source.dart` | **0.0%** (0/31) |
-| 全体 | 79.7% (228/286) |
+| 全体 | 85.0% (322/379) |
 
 ### 0% を放置している理由
 
@@ -55,7 +56,7 @@ flutter test --coverage      # coverage/lcov.info が出る
 
 ### 数字を目的にしない
 
-カバレッジは「まだ見ていない場所」を探す道具として使っています。追加したテストが実際に効いているかは、**わざとコードを壊して落ちることを確認**して担保します（#26・#6 で実施）。
+カバレッジは「まだ見ていない場所」を探す道具として使っています。追加したテストが実際に効いているかは、**わざとコードを壊して落ちることを確認**して担保します（#26・#6・#4 で実施）。
 
 ## 構成
 
@@ -71,6 +72,7 @@ lib/
   auth_gateway.dart      Google認証の抽象 + google_sign_in 実装
   photo_uploader.dart    送信先の抽象
   wake_lock.dart         画面スリープ抑止の抽象 + wakelock_plus 実装
+  photo_record.dart      撮影記録（圃場ID/撮影日時/送信状態）と保存先
   drive_uploader.dart    Drive API v3 multipart 実装
 ```
 
