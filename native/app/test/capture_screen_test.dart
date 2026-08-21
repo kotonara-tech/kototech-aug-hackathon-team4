@@ -4,6 +4,7 @@ import 'package:farmcamera/auth_gateway.dart';
 import 'package:farmcamera/main.dart';
 import 'package:farmcamera/photo_source.dart';
 import 'package:farmcamera/photo_uploader.dart';
+import 'package:farmcamera/wake_lock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -77,6 +78,17 @@ class _FakeAuthGateway implements AuthGateway {
   Future<Map<String, String>?> authHeaders() async => <String, String>{};
 }
 
+class _FakeWakeLock implements WakeLock {
+  final List<bool> calls = <bool>[];
+  bool get isEnabled => calls.isNotEmpty && calls.last;
+
+  @override
+  Future<void> enable() async => calls.add(true);
+
+  @override
+  Future<void> disable() async => calls.add(false);
+}
+
 class _FakeUploader implements PhotoUploader {
   final List<File> uploaded = <File>[];
 
@@ -89,12 +101,14 @@ void main() {
   late _FakePhotoSource source;
   late _FakeAuthGateway auth;
   late _FakeUploader uploader;
+  late _FakeWakeLock wakeLock;
 
   setUp(() {
     tempDir = Directory.systemTemp.createTempSync('capture_screen_test');
     source = _FakePhotoSource(tempDir);
     auth = _FakeAuthGateway();
     uploader = _FakeUploader();
+    wakeLock = _FakeWakeLock();
   });
 
   tearDown(() {
@@ -108,7 +122,12 @@ void main() {
 
   Future<void> pumpScreen(WidgetTester tester) async {
     await tester.pumpWidget(
-      FarmCameraApp(source: source, auth: auth, uploader: uploader),
+      FarmCameraApp(
+        source: source,
+        auth: auth,
+        uploader: uploader,
+        wakeLock: wakeLock,
+      ),
     );
     await tester.pumpAndSettle();
   }
@@ -328,5 +347,35 @@ void main() {
 
     await tester.tap(find.text('停止'));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('開始で画面スリープを抑止し、停止で解除する（#6）', (tester) async {
+    await pumpScreen(tester);
+    await tester.tap(find.text('Googleでサインイン'));
+    await tester.pumpAndSettle();
+    expect(wakeLock.calls, isEmpty, reason: 'サインインしただけでは抑止しない');
+
+    await tester.tap(find.text('開始'));
+    await tester.pumpAndSettle();
+    expect(wakeLock.isEnabled, isTrue);
+
+    await tester.tap(find.text('停止'));
+    await tester.pumpAndSettle();
+    expect(wakeLock.isEnabled, isFalse);
+  });
+
+  testWidgets('撮影中に画面を離れても抑止が残らない（#6）', (tester) async {
+    await pumpScreen(tester);
+    await tester.tap(find.text('Googleでサインイン'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('開始'));
+    await tester.pumpAndSettle();
+    expect(wakeLock.isEnabled, isTrue);
+
+    // 画面を破棄する（別画面へ遷移・アプリ終了に相当）。
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+
+    expect(wakeLock.isEnabled, isFalse, reason: '端末が眠れないままになるのを防ぐ');
   });
 }

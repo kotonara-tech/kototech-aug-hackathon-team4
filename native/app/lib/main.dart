@@ -6,6 +6,7 @@ import 'capture_session.dart';
 import 'drive_uploader.dart';
 import 'photo_source.dart';
 import 'photo_uploader.dart';
+import 'wake_lock.dart';
 
 final _intervalLabels = <Duration, String>{
   const Duration(minutes: 1): '1分',
@@ -30,6 +31,7 @@ class FarmCameraApp extends StatelessWidget {
     required this.source,
     required this.auth,
     this.uploader,
+    this.wakeLock,
   });
 
   final PhotoSource source;
@@ -38,12 +40,20 @@ class FarmCameraApp extends StatelessWidget {
   /// 省略時は Drive へ送る。ウィジェットテストでフェイクを差し込むための口。
   final PhotoUploader? uploader;
 
+  /// 省略時は端末の画面スリープを抑止する。テストで差し替えるための口。
+  final WakeLock? wakeLock;
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: '定点撮影POC',
       theme: ThemeData(colorSchemeSeed: const Color(0xFF236B50), useMaterial3: true),
-      home: CaptureScreen(source: source, auth: auth, uploader: uploader),
+      home: CaptureScreen(
+        source: source,
+        auth: auth,
+        uploader: uploader,
+        wakeLock: wakeLock,
+      ),
     );
   }
 }
@@ -58,11 +68,15 @@ class CaptureScreen extends StatefulWidget {
     required this.source,
     required this.auth,
     this.uploader,
+    this.wakeLock,
   });
 
   final PhotoSource source;
   final AuthGateway auth;
   final PhotoUploader? uploader;
+
+  /// 省略時は端末の画面スリープを抑止する。テストで差し替えるための口。
+  final WakeLock? wakeLock;
 
   @override
   State<CaptureScreen> createState() => _CaptureScreenState();
@@ -81,6 +95,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
       capturer: widget.source.capture,
       uploader: widget.uploader ??
           DriveUploader(authHeadersProvider: widget.auth.authHeaders),
+      wakeLock: widget.wakeLock ?? const ScreenWakeLock(),
     );
     _bootstrap();
   }
