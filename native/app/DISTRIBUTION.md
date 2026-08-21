@@ -1,0 +1,172 @@
+# 配布手順（実機検証用）
+
+対象: 定点撮影POC Android アプリ / issue #23
+作成日: 2026-08-21 / Flutter 3.47.1 (Dart 3.13.1)
+
+## 0. 先に読んでほしい制約
+
+**GCP / OAuth クライアントID（#11）が未完了のあいだ、配布したAPKでは Google サインインと Drive 送信が失敗します。**
+
+| 機能 | #11 未完了時 |
+|---|---|
+| カメラ権限リクエスト・プレビュー | 動く |
+| 撮影・端末内への保存（`CAM001_yyyyMMdd_HHmmss.jpg`） | 動く |
+| 撮影間隔の切替（1/5/10/30分）・開始/停止 | 動く |
+| 撮影枚数などのステータス表示 | 動く |
+| **Googleサインイン** | **失敗**（ステータスパネルの「直近エラー」に表示） |
+| **Driveへの送信** | **サインイン必須のため到達しない** |
+
+サインインしないと「開始」ボタンは押せません（`AGENTS.md` 5.2-2）。したがって **#11 が終わるまで、このAPKで確認できるのはプレビューまで**です。撮影の連続動作まで見るには #11 の完了が必要です。
+
+## 1. 配布物
+
+`flutter build` の出力は `build/` 配下にあり `flutter clean` で消えるため、配布用のコピーを `native/app/dist/` に置いています。**このディレクトリは `.gitignore` 済みで、APK はリポジトリにコミットしません。**
+
+| ファイル | サイズ | 用途 |
+|---|---|---|
+| `dist/farmcamera-release-arm64-v8a.apk` | 17.5 MB | **既定。** 現代の Android 実機はほぼこれ |
+| `dist/farmcamera-release-armeabi-v7a.apk` | 14.9 MB | 32bit の古い端末向け |
+| `dist/farmcamera-debug-universal.apk` | 171 MB | 障害切り分け用。全ABI同梱・最適化なし |
+
+release と debug の使い分け:
+
+- **release** — 軽量で動作が速い。1分間隔の連続動作デモはこちら
+- **debug** — `adb logcat` に Dart 側のログが出る。挙動がおかしいときだけ使う。171MB あるのでクラウド経由の受け渡しには向かない（2-2 / 2-3 を使う）
+
+`AGENTS.md` 1節の完了条件は「デバッグAPKで確認」と書かれているため、**最終確認は debug APK でも行う**こと。
+
+## 2. インストール
+
+### USB は必須ではない
+
+対象はスマートフォンなので、**アプリを入れて動かすだけなら USB ケーブルは要りません。** 用途によって必要かどうかが変わります。
+
+| やりたいこと | USB | 代替手段 |
+|---|---|---|
+| APKを入れて動かす（実機デモ） | **不要** | APKファイルを端末に送って開く（2-1） |
+| `adb logcat` でログを見る | 不要 | ワイヤレスデバッグ（2-3、Android 11以降） |
+| `flutter run` でホットリロード | 不要 | 同上 |
+| Android 10 以前の端末でログを見たい | **必要** | ワイヤレスデバッグが使えないため |
+
+迷ったら **2-1（ファイルを送る）から試してください。** 不具合が出て原因が分からないときだけ 2-3 に進めば十分です。
+
+### 2-1. APKファイルを端末に送る（ケーブル不要・推奨）
+
+`dist/farmcamera-release-arm64-v8a.apk`（17.5MB）を端末に届けて、端末側でファイルを開くだけです。届ける手段は何でも構いません。
+
+- Google ドライブ／その他クラウドに置いて端末からダウンロード
+- 自分宛にメール添付（17.5MBなので添付上限に注意）
+- 端末を「ファイル転送(MTP)」モードで PC につないでコピー（この場合はケーブルを使いますが、開発者向けオプションは不要）
+
+**端末側で1回だけ許可が要ります。** APK を開くと「不明なアプリのインストール」がブロックされるので、確認ダイアログから設定を開き、**APKを開いたアプリ（Chrome、Files、Drive など）に対して**インストールを許可してください。Android 8 以降はアプリ単位の許可になっています。
+
+release版は 17.5MB なのでこの経路で問題ありませんが、**debug版は 171MB あるためクラウド経由は現実的ではありません**。debug版が必要なら 2-2 か 2-3 を使ってください。
+
+### 2-2. USB 経由（`adb install`）
+
+USB デバッグを使える状態なら、これが最も確実です。端末側で「開発者向けオプション」→「USBデバッグ」を有効にしておきます。
+
+```bash
+# 接続確認。unauthorized と出たら端末側のダイアログで許可する
+adb devices
+
+# インストール（-r は再インストール）
+adb install -r native/app/dist/farmcamera-release-arm64-v8a.apk
+```
+
+`adb` は `%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe` にあります。
+
+### 2-3. ワイヤレスデバッグ（Android 11 以降・ケーブル不要）
+
+ログを見たい、`flutter run` を使いたい、でもケーブルは使いたくない場合はこれです。**PC と端末が同じ Wi-Fi にいる必要があります。**
+
+端末側: 「開発者向けオプション」→「ワイヤレスデバッグ」をON →「ペア設定コードによるデバイスのペア設定」
+
+```bash
+# 端末に表示されるIP:ポートとペア設定コードを使う（初回のみ）
+adb pair 192.168.x.x:41234
+
+# ペア後、ワイヤレスデバッグ画面に出ている IP:ポート（ペア用とは別）へ接続
+adb connect 192.168.x.x:5555
+
+adb devices
+adb install -r native/app/dist/farmcamera-release-arm64-v8a.apk
+```
+
+接続してしまえば `adb logcat` も `flutter run` もそのまま使えます。
+
+### 共通の注意
+
+署名が違う版を上書きしようとすると `INSTALL_FAILED_UPDATE_INCOMPATIBLE` になります。その場合は先に `adb uninstall com.kotonara.farmcamera`（またはランチャーからアンインストール）してください。
+
+### 端末のABIを確認する
+
+`arm64-v8a` 版を入れれば大半の端末で動きます。確信が持てないときだけ確認してください。
+
+- adb が使えるなら `adb shell getprop ro.product.cpu.abi`
+- ケーブルもワイヤレスも使わないなら、端末の「設定 > デバイス情報」や CPU-Z 等のアプリで確認できます
+- どうしても分からなければ、`armeabi-v7a` 版はほぼ全ての端末で動きます（64bit端末でも32bitアプリとして動作する）
+
+### 2-4. 開発中は `flutter run` が速い
+
+APKを作らず直接流し込めます。ホットリロードとログがそのまま使えるため、実機で調整するあいだはこちらが効率的です。USB・ワイヤレスどちらの接続でも使えます。
+
+```bash
+flutter devices
+flutter run --release   # ログを見たいときは --debug
+```
+
+## 3. 初回起動時にやること
+
+1. **カメラ権限のダイアログで「許可」する**
+   拒否するとプレビュー位置にエラーと「再試行」ボタンが出ます（`PhotoSource` の初期化失敗）。端末の設定から権限を付け直してから「再試行」を押してください
+2. Googleサインイン（#11 完了後）
+   OAuth同意画面の**テストユーザーに登録済みのアカウント**でサインインしてください。未登録のアカウントは同意画面で弾かれます
+3. 撮影間隔を選び「開始」
+   開始した瞬間に1枚目を撮ります（間隔ぶん待ちません）
+
+## 4. 署名について（#24 で追跡）
+
+`android/app/build.gradle.kts` は Flutter の初期テンプレートのままで、**release ビルドも debug キーで署名**しています。実際に配布APKへ載っている証明書を確認済みです。
+
+```
+$ apksigner verify --print-certs dist/farmcamera-release-arm64-v8a.apk
+Signer #1 certificate DN: C=US, O=Android, CN=Android Debug
+Signer #1 certificate SHA-1 digest: df39d502fa77c2c0aaecb92f26892ec8c41a2ebb
+```
+
+これは #11 で GCP に登録する SHA-1 と同じ値です。
+
+| 項目 | 値 |
+|---|---|
+| パッケージ名 | `com.kotonara.farmcamera` |
+| SHA-1 | `DF:39:D5:02:FA:77:C2:C0:AA:EC:B9:2F:26:89:2E:C8:C4:1A:2E:BB` |
+
+**重要: ビルドマシンを固定してください。** `~/.android/debug.keystore` は開発マシンごとに自動生成される別物です。別のマシンでビルドすると SHA-1 が変わり、GCP の登録と一致しなくなって **Googleサインインだけが失敗**します。カメラも撮影も動くため原因が見えにくい壊れ方をします。
+
+keystore とパスワードは、このリポジトリが Public であるため**絶対にコミットしません**（`risk-assessment.md` の方針）。
+
+## 5. 配布チャネル
+
+**既定はローカル配布**です。`dist/` の APK を、身内で使っている手段（クラウドの共有フォルダ、メール、USB）で端末に届けてください。台数が少ないうちはこれで十分です。
+
+**GitHub Releases は使いません。** このリポジトリは Public なので、Releases に APK を上げると**誰でもダウンロードできる**状態になります。公開して困る中身ではありませんが、検証中のビルドを不特定多数が入手できる状態にする必要が無いため、既定では公開しません。配る相手が増えて手渡しが回らなくなった時点で改めて判断します。
+
+## 6. 再ビルド手順
+
+```bash
+cd native/app
+flutter build apk --release --split-per-abi   # 配布用
+flutter build apk --debug                     # 切り分け用
+
+cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk   dist/farmcamera-release-arm64-v8a.apk
+cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk dist/farmcamera-release-armeabi-v7a.apk
+cp build/app/outputs/flutter-apk/app-debug.apk               dist/farmcamera-debug-universal.apk
+```
+
+所要時間の目安は `BUILD_NOTES.md` 参照（初回のみ大きく、2回目以降は数十秒）。
+
+## 7. 実機で確認したいこと
+
+実機検証の観点は #8 に集約しています。この手順書の範囲は「端末に入るところまで」です。
+なお **画面レイアウトの縦横対応は未実装（#22）**なので、横向きにするとレイアウトが崩れる可能性があります。実機で崩れ方を確認できたら #22 に記録してください。
