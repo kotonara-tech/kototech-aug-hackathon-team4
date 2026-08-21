@@ -1,47 +1,68 @@
-import 'dart:async';
-import 'dart:io';
-
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 
+import 'auth_gateway.dart';
+import 'capture_scheduler.dart';
 import 'capture_session.dart';
 import 'drive_uploader.dart';
+import 'photo_source.dart';
+import 'photo_uploader.dart';
 
-const _driveScopes = <String>['https://www.googleapis.com/auth/drive.file'];
-
-// Duration は primitive equality を持たないため const マップのキーにできない。
 final _intervalLabels = <Duration, String>{
-  Duration(minutes: 1): '1分',
-  Duration(minutes: 5): '5分',
-  Duration(minutes: 10): '10分',
-  Duration(minutes: 30): '30分',
+  const Duration(minutes: 1): '1分',
+  const Duration(minutes: 5): '5分',
+  const Duration(minutes: 10): '10分',
+  const Duration(minutes: 30): '30分',
 };
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const FarmCameraApp());
+  runApp(
+    FarmCameraApp(
+      source: CameraPhotoSource(),
+      auth: GoogleAuthGateway(),
+    ),
+  );
 }
 
 class FarmCameraApp extends StatelessWidget {
-  const FarmCameraApp({super.key});
+  const FarmCameraApp({
+    super.key,
+    required this.source,
+    required this.auth,
+    this.uploader,
+  });
+
+  final PhotoSource source;
+  final AuthGateway auth;
+
+  /// 省略時は Drive へ送る。ウィジェットテストでフェイクを差し込むための口。
+  final PhotoUploader? uploader;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: '定点撮影POC',
       theme: ThemeData(colorSchemeSeed: const Color(0xFF236B50), useMaterial3: true),
-      home: const CaptureScreen(),
+      home: CaptureScreen(source: source, auth: auth, uploader: uploader),
     );
   }
 }
 
-/// カメラ・認証という「実機がないと動かない部分」を担い、撮影の判断そのものは
-/// [CaptureSession] に委ねる薄い UI 層。周期実行の [Timer] もここが持つ。
+/// 単一画面（`AGENTS.md` 5.1）。上からプレビュー・操作・ステータスパネル。
+///
+/// 撮影の判断は [CaptureSession]、周期実行は [CaptureScheduler]、ハードウェアと
+/// 認証は [PhotoSource] / [AuthGateway] が担い、この画面は配線と描画に徹する。
 class CaptureScreen extends StatefulWidget {
-  const CaptureScreen({super.key});
+  const CaptureScreen({
+    super.key,
+    required this.source,
+    required this.auth,
+    this.uploader,
+  });
+
+  final PhotoSource source;
+  final AuthGateway auth;
+  final PhotoUploader? uploader;
 
   @override
   State<CaptureScreen> createState() => _CaptureScreenState();
@@ -49,120 +70,60 @@ class CaptureScreen extends StatefulWidget {
 
 class _CaptureScreenState extends State<CaptureScreen> {
   late final CaptureSession _session;
+  final _scheduler = CaptureScheduler();
 
-  CameraController? _cameraController;
-  String? _cameraError;
-
-  GoogleSignInAccount? _account;
   bool _signingIn = false;
-  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
     _session = CaptureSession(
-      capturer: _capturePhoto,
-      uploader: DriveUploader(authHeadersProvider: _driveAuthHeaders),
+      capturer: widget.source.capture,
+      uploader: widget.uploader ??
+          DriveUploader(authHeadersProvider: widget.auth.authHeaders),
     );
     _bootstrap();
   }
 
   Future<void> _bootstrap() async {
-    await _initCamera();
-    await _initGoogleSignIn();
-  }
+    await widget.source.initialize();
+    if (mounted) setState(() {});
 
-  Future<void> _initCamera() async {
-    final status = await Permission.camera.request();
-    if (!status.isGranted) {
-      setState(() => _cameraError = 'カメラ権限が許可されていません。');
-      return;
-    }
-    try {
-      final cameras = await availableCameras();
-      final backCamera = cameras.firstWhere(
-        (c) => c.lensDirection == CameraLensDirection.back,
-        orElse: () => cameras.first,
-      );
-      final controller = CameraController(
-        backCamera,
-        ResolutionPreset.medium,
-        enableAudio: false,
-      );
-      await controller.initialize();
-      if (!mounted) return;
-      setState(() {
-        _cameraController = controller;
-        _cameraError = null;
-      });
-    } catch (e) {
-      setState(() => _cameraError = 'カメラの初期化に失敗しました: $e');
-    }
-  }
-
-  Future<void> _initGoogleSignIn() async {
-    await GoogleSignIn.instance.initialize();
-    final account = await GoogleSignIn.instance.attemptLightweightAuthentication();
+    await widget.auth.initialize();
     if (!mounted) return;
-    setState(() => _account = account);
-    _session.isSignedIn = account != null;
+    setState(() {});
+    _session.isSignedIn = widget.auth.email != null;
   }
 
   Future<void> _signIn() async {
     setState(() => _signingIn = true);
     try {
-      final account = await GoogleSignIn.instance.authenticate(scopeHint: _driveScopes);
+      final signedIn = await widget.auth.signIn();
       if (!mounted) return;
-      setState(() => _account = account);
-      _session.isSignedIn = true;
+      _session.isSignedIn = signedIn;
     } catch (e) {
-      _showError('サインインに失敗しました: $e');
+      // AGENTS.md 5.1 の「直近エラー」としてステータスパネルへ出す。
+      // SnackBar だと消えた後に失敗を確認できない。
+      _session.reportError('サインインに失敗しました: $e');
     } finally {
       if (mounted) setState(() => _signingIn = false);
     }
   }
 
-  Future<Map<String, String>?> _driveAuthHeaders() async {
-    final account = _account;
-    if (account == null) return null;
-    return account.authorizationClient.authorizationHeaders(
-      _driveScopes,
-      promptIfNecessary: true,
-    );
-  }
-
-  /// [CaptureSession] から呼ばれる撮影処理。指定された名前で端末内へ保存する。
-  Future<File> _capturePhoto(String fileName) async {
-    final controller = _cameraController;
-    if (controller == null || !controller.value.isInitialized) {
-      throw StateError('カメラが初期化されていません。');
-    }
-    final picture = await controller.takePicture();
-    final tempDir = await getTemporaryDirectory();
-    return File(picture.path).copy('${tempDir.path}/$fileName');
-  }
-
   void _startCapture() {
     if (!_session.start()) return;
-    _timer = Timer.periodic(_session.interval, (_) => _session.captureOnce());
-    unawaited(_session.captureOnce());
+    _scheduler.start(_session.interval, _session.captureOnce);
   }
 
   void _stopCapture() {
-    _timer?.cancel();
-    _timer = null;
+    _scheduler.stop();
     _session.stop();
-  }
-
-  void _showError(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
-    _cameraController?.dispose();
+    _scheduler.dispose();
+    widget.source.dispose();
     _session.dispose();
     super.dispose();
   }
@@ -173,7 +134,7 @@ class _CaptureScreenState extends State<CaptureScreen> {
       appBar: AppBar(title: const Text('定点撮影POC')),
       body: Column(
         children: [
-          Expanded(flex: 3, child: _buildCameraPreview()),
+          Expanded(flex: 3, child: _buildPreview()),
           Expanded(
             flex: 2,
             child: ListenableBuilder(
@@ -186,32 +147,35 @@ class _CaptureScreenState extends State<CaptureScreen> {
     );
   }
 
-  Widget _buildCameraPreview() {
-    if (_cameraError != null) {
+  Widget _buildPreview() {
+    final error = widget.source.errorMessage;
+    if (error != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(_cameraError!, textAlign: TextAlign.center),
+              Text(error, textAlign: TextAlign.center),
               const SizedBox(height: 12),
-              ElevatedButton(onPressed: _initCamera, child: const Text('再試行')),
+              ElevatedButton(
+                onPressed: () async {
+                  await widget.source.initialize();
+                  if (mounted) setState(() {});
+                },
+                child: const Text('再試行'),
+              ),
             ],
           ),
         ),
       );
     }
-    final controller = _cameraController;
-    if (controller == null || !controller.value.isInitialized) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    return CameraPreview(controller);
+    return widget.source.buildPreview();
   }
 
   Widget _buildControls() {
-    final canStart =
-        !_session.isRunning && _cameraController != null && _session.isSignedIn;
+    final email = widget.auth.email;
+    final canStart = !_session.isRunning && widget.source.isReady && _session.isSignedIn;
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -221,11 +185,11 @@ class _CaptureScreenState extends State<CaptureScreen> {
             children: [
               Expanded(
                 child: Text(
-                  _account == null ? '未サインイン' : 'サインイン中: ${_account!.email}',
+                  email == null ? '未サインイン' : 'サインイン中: $email',
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (_account == null)
+              if (email == null)
                 ElevatedButton(
                   onPressed: _signingIn ? null : _signIn,
                   child: Text(_signingIn ? '接続中' : 'Googleでサインイン'),

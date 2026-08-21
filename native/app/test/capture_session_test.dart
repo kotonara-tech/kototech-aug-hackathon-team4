@@ -19,12 +19,17 @@ class _FakeCapturer {
   /// 実行タイミングに依存せず再現するためのゲート。
   Completer<void>? gate;
 
+  /// 撮影処理が終わった時点で complete する。実ファイルI/Oの完了を
+  /// 固定時間の待機に頼らず待つために使う。
+  Completer<void>? finished;
+
   Future<File> call(String fileName) async {
     requestedNames.add(fileName);
     if (gate != null) await gate!.future;
     if (shouldFail) throw Exception('camera busy');
     final file = File('${dir.path}/$fileName');
     await file.writeAsBytes(<int>[0xFF, 0xD8, 0xFF]); // JPEG SOI 相当のダミー
+    finished?.complete();
     return file;
   }
 }
@@ -33,8 +38,12 @@ class _FakeUploader implements PhotoUploader {
   final List<File> uploaded = <File>[];
   bool shouldFail = false;
 
+  /// 非 null の間は送信が完了しない。送信が撮影間隔より長引く状況を再現する。
+  Completer<void>? gate;
+
   @override
   Future<void> upload(File file) async {
+    if (gate != null) await gate!.future;
     if (shouldFail) throw Exception('network down');
     uploaded.add(file);
   }
@@ -61,7 +70,12 @@ void main() {
 
   tearDown(() {
     session.dispose();
-    if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+    try {
+      if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+    } on FileSystemException {
+      // 実行中の撮影がまだ書き込み中の場合、Windows では削除できない。
+      // 一時ディレクトリなのでOSに任せる。
+    }
   });
 
   group('撮影間隔の選択肢（AGENTS.md 2節-4）', () {
@@ -241,6 +255,116 @@ void main() {
         'CAM001_20260821_140509.jpg',
         'CAM001_20260821_140609.jpg',
       ]);
+    });
+  });
+
+  group('送信が長引いても撮影を止めない（AGENTS.md 1節の連続撮影）', () {
+    test('送信中でも次の tick で撮影できる', () async {
+      final uploadGate = Completer<void>();
+      uploader.gate = uploadGate;
+      capturer.finished = Completer<void>();
+      session.isSignedIn = true;
+      session.start();
+
+      // 1枚目: 撮影は完了するが送信は uploadGate で止まったまま。
+      final first = session.captureOnce();
+      await capturer.finished!.future;
+      await Future<void>.delayed(Duration.zero);
+      expect(session.capturedCount, 1, reason: '撮影自体は完了しているべき');
+      capturer.finished = null;
+
+      // 送信が終わらないうちに次の tick が来る。
+      uploader.gate = null;
+      now = DateTime(2026, 8, 21, 14, 6, 9);
+      await session.captureOnce();
+
+      expect(
+        session.capturedCount,
+        2,
+        reason: '送信の遅さで撮影をスキップしてはいけない（欠測になる）',
+      );
+      expect(capturer.requestedNames, <String>[
+        'CAM001_20260821_140509.jpg',
+        'CAM001_20260821_140609.jpg',
+      ]);
+
+      uploadGate.complete();
+      await first;
+      expect(session.sentCount, 2, reason: '遅れていた1枚目も最終的に送信される');
+    });
+  });
+
+  group('停止・破棄と実行中処理の競合', () {
+    test('撮影中に stop されても、その1枚の送信は完了させる', () async {
+      final gate = Completer<void>();
+      capturer.gate = gate;
+      session.isSignedIn = true;
+      session.start();
+
+      final inFlight = session.captureOnce();
+      session.stop();
+      gate.complete();
+      await inFlight;
+
+      expect(session.isRunning, isFalse);
+      expect(session.capturedCount, 1, reason: '撮り終えた写真を捨てない');
+      expect(session.sentCount, 1);
+    });
+
+    test('停止後は次の tick で撮影しない', () async {
+      session.isSignedIn = true;
+      session.start();
+      session.stop();
+      await session.captureOnce();
+
+      expect(capturer.requestedNames, isEmpty);
+    });
+
+    test('dispose 後に実行中の撮影が完了しても通知しない', () async {
+      final gate = Completer<void>();
+      capturer.gate = gate;
+      session.isSignedIn = true;
+      session.start();
+
+      final inFlight = session.captureOnce();
+      session.dispose();
+      gate.complete();
+
+      // dispose 済みの ChangeNotifier へ通知すると FlutterError で落ちる。
+      await expectLater(inFlight, completes);
+    });
+  });
+
+  group('setInterval の入力不変条件', () {
+    test('ゼロは拒否する（タイマーが暴走する）', () {
+      expect(session.setInterval(Duration.zero), isFalse);
+      expect(session.interval, const Duration(minutes: 1));
+    });
+
+    test('負値は拒否する', () {
+      expect(session.setInterval(const Duration(minutes: -1)), isFalse);
+      expect(session.interval, const Duration(minutes: 1));
+    });
+
+    test('仕様外でも正の値なら受け付ける（4値への限定はUIの責務）', () {
+      expect(session.setInterval(const Duration(seconds: 10)), isTrue);
+      expect(session.interval, const Duration(seconds: 10));
+    });
+  });
+
+  group('撮影以外のエラー表示（AGENTS.md 5.1 の直近エラー）', () {
+    test('reportError でステータスに残る', () {
+      session.reportError('サインインに失敗しました: test');
+
+      expect(session.lastError, 'サインインに失敗しました: test');
+    });
+
+    test('start すると直近エラーはクリアされる', () {
+      session.reportError('サインインに失敗しました: test');
+      session.isSignedIn = true;
+      session.start();
+
+      expect(session.lastError, isNull);
     });
   });
 
