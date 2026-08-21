@@ -105,9 +105,33 @@ void main() {
     await uploader.upload(photo);
 
     expect(
-      requests.every((r) => r.url.path.startsWith('/upload/')),
-      isTrue,
-      reason: '2回目はアップロードだけを行うべき',
+      requests.where((r) => r.url.path.startsWith('/upload/')),
+      hasLength(1),
+      reason: '2回目もアップロード自体は必ず行う',
+    );
+    expect(
+      requests.where((r) => !r.url.path.startsWith('/upload/')),
+      isEmpty,
+      reason: '2回目は検索も作成もしない',
+    );
+  });
+
+  test('フォルダIDは SharedPreferences に永続化される（別インスタンスでも再利用）', () async {
+    await buildUploader(buildClient()).upload(photo);
+    requests.clear();
+
+    // アプリ再起動を模して別インスタンスを作る。インメモリキャッシュ実装なら
+    // ここで検索・作成が走ってしまう。
+    await buildUploader(buildClient()).upload(photo);
+
+    expect(
+      requests.where((r) => !r.url.path.startsWith('/upload/')),
+      isEmpty,
+      reason: 'キャッシュが永続化されていれば検索・作成は不要',
+    );
+    expect(
+      requests.where((r) => r.url.path.startsWith('/upload/')),
+      hasLength(1),
     );
   });
 
