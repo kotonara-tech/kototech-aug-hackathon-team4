@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}写真一覧 - 定点カメラ{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+  {% if cameras %}
+  <nav class="filter">
+    <a class="filter__item{% if not selected_camera %} filter__item--on{% endif %}" href="/">すべて</a>
+    {% for camera in cameras %}
+    <a class="filter__item{% if selected_camera == camera %} filter__item--on{% endif %}"
+       href="/?camera={{ camera | urlencode }}">{{ camera }}</a>
+    {% endfor %}
+  </nav>
+  {% endif %}
+
+  <form class="refresh" method="get" action="/">
+    {% if selected_camera %}<input type="hidden" name="camera" value="{{ selected_camera }}">{% endif %}
+    <button class="refresh__button" type="submit">更新</button>
+  </form>
+</div>
+
+{% if latest %}
+<section class="latest">
+  <h2 class="latest__heading">最新の写真</h2>
+  <a class="latest__link" href="/photos/{{ latest.id }}">
+    <img class="latest__image" src="/photos/{{ latest.id }}/image"
+         alt="{{ latest.display_datetime() }}の写真">
+  </a>
+  <p class="latest__meta">
+    <strong>{{ latest.display_datetime() }}</strong>
+    {% if latest.camera_id %}<span class="latest__camera">{{ latest.camera_id }}</span>{% endif %}
+  </p>
+</section>
+{% endif %}
+
+{% if photos %}
+<h2 class="section-heading">これまでの写真（{{ photos | length }}枚）</h2>
+<ul class="grid">
+  {% for photo in photos %}
+  <li class="card">
+    <a href="/photos/{{ photo.id }}">
+      <img class="card__image" src="/photos/{{ photo.id }}/image" alt="{{ photo.display_datetime() }}の写真" loading="lazy">
+      <div class="card__body">
+        <span class="card__time">{{ photo.display_datetime() }}</span>
+        {% if photo.camera_id %}<span class="card__camera">{{ photo.camera_id }}</span>{% endif %}
+      </div>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="empty">
+  まだ写真がありません。<br>
+  カメラで撮影すると、ここに表示されます。
+</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}エラー - 定点カメラ{% endblock %}
+
+{% block content %}
+<div class="notice">
+  <p class="notice__message">{{ message }}</p>
+  {% if hint %}<p class="notice__hint">{{ hint }}</p>{% endif %}
+  <form class="refresh" method="get" action="/">
+    <button class="refresh__button" type="submit">もう一度読み込む</button>
+  </form>
+</div>
+{% endblock %}

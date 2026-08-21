@@ -1,0 +1,150 @@
+/* 屋外・タブレットでも読みやすいよう、文字と余白は大きめにする */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  color: #1f2420;
+  background: #f6f7f4;
+  line-height: 1.6;
+}
+
+/* ヘッダー */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.9rem 1.2rem;
+  background: #3f7d4e;
+  color: #fff;
+}
+.header__title { color: #fff; font-size: 1.15rem; font-weight: 700; text-decoration: none; }
+.header__user { display: flex; align-items: center; gap: 1rem; font-size: 0.9rem; }
+.header__email { opacity: 0.9; }
+.header__logout { color: #fff; text-decoration: underline; }
+
+.main { max-width: 1100px; margin: 0 auto; padding: 1.2rem; }
+
+/* 操作列 */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.2rem;
+}
+.refresh { margin: 0; }
+.refresh__button {
+  padding: 0.55rem 1.3rem;
+  border: 1px solid #3f7d4e;
+  border-radius: 8px;
+  background: #fff;
+  color: #3f7d4e;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.refresh__button:hover { background: #eef4ef; }
+
+/* 最新の写真 */
+.latest { margin: 0 0 2rem; }
+.latest__heading { margin: 0 0 0.6rem; font-size: 1.05rem; color: #3f7d4e; }
+.latest__link { display: block; }
+.latest__image {
+  width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  display: block;
+  border-radius: 10px;
+  background: #e6e9e4;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.latest__meta { display: flex; justify-content: space-between; gap: 1rem; margin: 0.6rem 0 0; font-size: 1.05rem; }
+.latest__camera { color: #5c6b5e; }
+
+.section-heading { font-size: 1rem; color: #5c6b5e; margin: 0 0 0.8rem; font-weight: 600; }
+
+/* お知らせ・エラー */
+.notice {
+  max-width: 520px;
+  margin: 3rem auto;
+  padding: 2rem;
+  text-align: center;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.notice__message { margin: 0 0 0.5rem; font-size: 1.1rem; font-weight: 600; }
+.notice__hint { margin: 0 0 1.5rem; color: #5c6b5e; font-size: 0.95rem; }
+
+/* 絞り込み */
+.filter { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0; }
+.filter__item {
+  padding: 0.5rem 1rem;
+  border: 1px solid #cfd8cf;
+  border-radius: 999px;
+  background: #fff;
+  color: #3f7d4e;
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+.filter__item--on { background: #3f7d4e; border-color: #3f7d4e; color: #fff; }
+
+/* 一覧 */
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+}
+.card {
+  background: #fff;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.card a { text-decoration: none; color: inherit; display: block; }
+.card__image { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: #e6e9e4; }
+.card__body { display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.7rem 0.9rem; }
+.card__time { font-weight: 600; }
+.card__camera { color: #5c6b5e; font-size: 0.9rem; }
+
+/* 空の状態 */
+.empty {
+  padding: 3rem 1rem;
+  text-align: center;
+  color: #5c6b5e;
+  background: #fff;
+  border-radius: 10px;
+}
+
+/* 個別ページ */
+.back { display: inline-block; margin-bottom: 1rem; color: #3f7d4e; }
+.detail { margin: 0; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.detail__image { width: 100%; display: block; background: #e6e9e4; }
+.detail__caption { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem; }
+.detail__time { font-size: 1.1rem; }
+.detail__camera { color: #5c6b5e; }
+
+/* ログイン */
+.login { max-width: 420px; margin: 3rem auto; padding: 2rem; text-align: center; background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.login__title { margin: 0 0 0.4rem; font-size: 1.6rem; }
+.login__lead { margin: 0 0 1.8rem; color: #5c6b5e; }
+.login__error { padding: 0.7rem; border-radius: 8px; background: #fdecea; color: #a3271c; font-size: 0.95rem; }
+.login__note { margin-top: 1.5rem; font-size: 0.85rem; color: #7a877c; }
+.button {
+  display: inline-block;
+  padding: 0.9rem 1.6rem;
+  border-radius: 8px;
+  background: #3f7d4e;
+  color: #fff;
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-decoration: none;
+}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ photo.display_datetime() }} - 定点カメラ{% endblock %}
+
+{% block content %}
+<a class="back" href="/">← 一覧へ戻る</a>
+
+<figure class="detail">
+  <img class="detail__image" src="/photos/{{ photo.id }}/image" alt="{{ photo.display_datetime() }}の写真">
+  <figcaption class="detail__caption">
+    <strong class="detail__time">{{ photo.display_datetime() }}</strong>
+    {% if photo.camera_id %}<span class="detail__camera">{{ photo.camera_id }}</span>{% endif %}
+  </figcaption>
+</figure>
+{% endblock %}

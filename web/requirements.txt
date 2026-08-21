@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+jinja2
+itsdangerous
+httpx
+python-dotenv
+
+# 開発用
+pytest

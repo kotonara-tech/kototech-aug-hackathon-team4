@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}ログイン - 定点カメラ{% endblock %}
+
+{% block content %}
+<div class="login">
+  <h1 class="login__title">定点カメラ</h1>
+  <p class="login__lead">畑やハウスの写真を確認できます。</p>
+
+  {% if error %}
+  <p class="login__error">
+    {% if error == "denied" %}ログインがキャンセルされました。
+    {% elif error == "expired" %}ログインの有効期限が切れました。お手数ですが、もう一度ログインしてください。
+    {% else %}ログインできませんでした。もう一度お試しください。
+    {% endif %}
+  </p>
+  {% endif %}
+
+  <a class="button" href="/auth/login">Google アカウントでログイン</a>
+
+  <p class="login__note">
+    写真の保存先である Google ドライブの閲覧許可を求めます。
+  </p>
+</div>
+{% endblock %}
