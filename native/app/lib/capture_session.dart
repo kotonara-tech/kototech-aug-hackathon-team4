@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import 'capture_naming.dart';
 import 'photo_uploader.dart';
+import 'wake_lock.dart';
 
 /// 1枚撮影して保存済みファイルを返す処理。カメラ実装をここで隠蔽する。
 typedef PhotoCapturer = Future<File> Function(String fileName);
@@ -32,6 +33,7 @@ class CaptureSession extends ChangeNotifier {
     required this.uploader,
     this.cameraId = 'CAM001',
     this.now = DateTime.now,
+    this.wakeLock = const NoopWakeLock(),
     Duration initialInterval = const Duration(minutes: 1),
   }) : _interval = initialInterval;
 
@@ -39,6 +41,9 @@ class CaptureSession extends ChangeNotifier {
   final PhotoUploader uploader;
   final String cameraId;
   final DateTime Function() now;
+
+  /// 撮影中の画面スリープ抑止（#6）。既定は何もしない。
+  final WakeLock wakeLock;
 
   Duration _interval;
   bool _isRunning = false;
@@ -74,6 +79,7 @@ class CaptureSession extends ChangeNotifier {
     _isRunning = true;
     _lastError = null;
     _notify();
+    _enableWakeLock();
     return true;
   }
 
@@ -81,6 +87,7 @@ class CaptureSession extends ChangeNotifier {
     if (!_isRunning) return;
     _isRunning = false;
     _notify();
+    _disableWakeLock();
   }
 
   /// 撮影間隔を変更する。変更できなければ `false`。
@@ -158,6 +165,28 @@ class CaptureSession extends ChangeNotifier {
     // 画面破棄とテストの tearDown など、二重に呼ばれても落ちないようにする。
     if (_disposed) return;
     _disposed = true;
+    if (_isRunning) {
+      _isRunning = false;
+      _disableWakeLock();
+    }
     super.dispose();
+  }
+
+  /// 画面スリープ抑止の有効化。**撮影の可否は左右しない。**
+  ///
+  /// 端末やOSによっては抑止できないことがあるが、それで撮影を止めるのは
+  /// 過剰。撮影は続けたうえで「画面が消えると止まる」ことだけ利用者へ伝える
+  /// （`AGENTS.md` 5.1 の直近エラー）。
+  void _enableWakeLock() {
+    wakeLock.enable().catchError((Object e) {
+      _lastError = 'スリープ抑止を有効にできませんでした: $e';
+      _notify();
+    });
+  }
+
+  /// 解除は失敗しても伝えない。停止・破棄の時点で利用者に打つ手が無く、
+  /// 端末側のスリープ設定が効くだけで実害が無いため。
+  void _disableWakeLock() {
+    wakeLock.disable().catchError((Object _) {});
   }
 }

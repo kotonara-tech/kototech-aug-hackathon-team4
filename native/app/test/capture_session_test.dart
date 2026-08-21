@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:farmcamera/capture_session.dart';
 import 'package:farmcamera/photo_uploader.dart';
+import 'package:farmcamera/wake_lock.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// 撮影したことにして、実ファイルを1つ作るフェイク。
@@ -49,10 +50,29 @@ class _FakeUploader implements PhotoUploader {
   }
 }
 
+class _FakeWakeLock implements WakeLock {
+  /// 呼び出しの履歴。true=有効化 / false=解除。順序も検証したいので配列で持つ。
+  final List<bool> calls = <bool>[];
+
+  bool failOnEnable = false;
+
+  bool get isEnabled => calls.isNotEmpty && calls.last;
+
+  @override
+  Future<void> enable() async {
+    if (failOnEnable) throw Exception('wakelock unavailable');
+    calls.add(true);
+  }
+
+  @override
+  Future<void> disable() async => calls.add(false);
+}
+
 void main() {
   late Directory tempDir;
   late _FakeCapturer capturer;
   late _FakeUploader uploader;
+  late _FakeWakeLock wakeLock;
   late DateTime now;
   late CaptureSession session;
 
@@ -60,10 +80,12 @@ void main() {
     tempDir = Directory.systemTemp.createTempSync('farmcamera_test');
     capturer = _FakeCapturer(tempDir);
     uploader = _FakeUploader();
+    wakeLock = _FakeWakeLock();
     now = DateTime(2026, 8, 21, 14, 5, 9);
     session = CaptureSession(
       capturer: capturer.call,
       uploader: uploader,
+      wakeLock: wakeLock,
       now: () => now,
     );
   });
@@ -377,5 +399,78 @@ void main() {
     await session.captureOnce();
 
     expect(notified, greaterThan(0));
+  });
+
+  group('撮影中の画面スリープ抑止（#6）', () {
+    /// 抑止の有効化は非同期なので、start() 直後のマイクロタスクを流す。
+    Future<void> settle() => Future<void>.delayed(Duration.zero);
+
+    test('開始すると抑止が有効になる', () async {
+      session.isSignedIn = true;
+      session.start();
+      await settle();
+
+      expect(wakeLock.isEnabled, isTrue);
+    });
+
+    test('停止すると解除される（通常のスリープ設定に戻る）', () async {
+      session.isSignedIn = true;
+      session.start();
+      await settle();
+      session.stop();
+      await settle();
+
+      expect(wakeLock.isEnabled, isFalse);
+      expect(wakeLock.calls, <bool>[true, false], reason: '有効化→解除の順で1回ずつ');
+    });
+
+    test('開始できなかったときは抑止しない（未サインイン）', () async {
+      expect(session.start(), isFalse);
+      await settle();
+
+      expect(wakeLock.calls, isEmpty, reason: '撮影していないのに画面を点けたままにしない');
+    });
+
+    test('実行中の再 start では抑止を重ねがけしない', () async {
+      session.isSignedIn = true;
+      session.start();
+      await settle();
+      session.start();
+      await settle();
+
+      expect(wakeLock.calls, <bool>[true]);
+    });
+
+    test('停止済みの stop では解除を繰り返さない', () async {
+      session.stop();
+      await settle();
+
+      expect(wakeLock.calls, isEmpty);
+    });
+
+    test('dispose すると解除される（画面を離れて抑止が残らない）', () async {
+      session.isSignedIn = true;
+      session.start();
+      await settle();
+
+      session.dispose();
+      await settle();
+
+      expect(wakeLock.isEnabled, isFalse, reason: '破棄後に端末が眠れないままになるのを防ぐ');
+    });
+
+    test('抑止に失敗しても撮影は開始でき、エラーはステータスに残る', () async {
+      // 端末やOSによっては抑止できないことがある。撮影自体は続けたいが、
+      // 「画面が消えると止まる」ことは利用者に伝わる必要がある。
+      wakeLock.failOnEnable = true;
+      session.isSignedIn = true;
+
+      expect(session.start(), isTrue);
+      await settle();
+
+      expect(session.isRunning, isTrue, reason: '抑止の失敗で撮影を止めない');
+      expect(session.lastError, isNotNull);
+      expect(session.lastError, contains('スリープ'));
+    });
   });
 }

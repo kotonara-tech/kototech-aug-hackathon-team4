@@ -16,7 +16,7 @@
 
 ```bash
 flutter pub get
-flutter test          # 61件
+flutter test          # 70件
 flutter analyze
 flutter run           # 実機接続時
 ```
@@ -31,30 +31,31 @@ flutter run           # 実機接続時
 flutter test --coverage      # coverage/lcov.info が出る
 ```
 
-実測値（61件のテスト）:
+実測値（70件のテスト）:
 
 | ファイル | 行カバレッジ |
 |---|---|
-| `capture_session.dart` | 100.0% (52/52) |
+| `capture_session.dart` | 100.0% (63/63) |
 | `capture_scheduler.dart` | 100.0% (9/9) |
 | `capture_naming.dart` | 100.0% (5/5) |
 | `drive_uploader.dart` | 98.0% (50/51) |
-| `main.dart` | 93.1% (94/101) |
+| `main.dart` | 93.4% (99/106) |
+| `wake_lock.dart` | 25.0% (2/8) |
 | `auth_gateway.dart` | **0.0%** (0/13) |
 | `photo_source.dart` | **0.0%** (0/31) |
-| 全体 | 80.2% (210/262) |
+| 全体 | 79.7% (228/286) |
 
 ### 0% を放置している理由
 
-`auth_gateway.dart` と `photo_source.dart` は `google_sign_in` / `camera` / `permission_handler` のプラットフォームチャネルを叩く**薄いアダプタ**で、ホスト側のテストでは実行できません。**ロジックを持たせず抽象の裏に押し出した結果**であり、設計どおりです。
+`auth_gateway.dart` / `photo_source.dart` と、`wake_lock.dart` の `ScreenWakeLock` は `google_sign_in` / `camera` / `permission_handler` / `wakelock_plus` のプラットフォームチャネルを叩く**薄いアダプタ**で、ホスト側のテストでは実行できません。**ロジックを持たせず抽象の裏に押し出した結果**であり、設計どおりです。
 
 ただし **0% は「誰も検証していない」という意味でもあります。** 端末固有の不具合はここに出るため、検証は実機確認（#8）が担います。カバレッジの数字だけを見て安心しないでください。
 
-残る未到達行は `main()` と `DriveUploader` の既定インスタンス生成、つまり**組み立て（composition root）だけ**です。分岐や判断を含まないため、テストで到達させる価値がありません。
+残る未到達行は `main()`・`DriveUploader`・`ScreenWakeLock` の既定インスタンス生成、つまり**組み立て（composition root）だけ**です。分岐や判断を含まないため、テストで到達させる価値がありません。
 
 ### 数字を目的にしない
 
-カバレッジは「まだ見ていない場所」を探す道具として使っています。追加したテストが実際に効いているかは、**わざとコードを壊して落ちることを確認**して担保します（#26 で実施）。
+カバレッジは「まだ見ていない場所」を探す道具として使っています。追加したテストが実際に効いているかは、**わざとコードを壊して落ちることを確認**して担保します（#26・#6 で実施）。
 
 ## 構成
 
@@ -69,6 +70,7 @@ lib/
   photo_source.dart      カメラの抽象 + camera/permission_handler 実装
   auth_gateway.dart      Google認証の抽象 + google_sign_in 実装
   photo_uploader.dart    送信先の抽象
+  wake_lock.dart         画面スリープ抑止の抽象 + wakelock_plus 実装
   drive_uploader.dart    Drive API v3 multipart 実装
 ```
 
