@@ -16,7 +16,7 @@
 
 ```bash
 flutter pub get
-flutter test          # 91件
+flutter test          # 98件
 flutter analyze
 flutter run           # 実機接続時
 ```
@@ -31,7 +31,7 @@ flutter run           # 実機接続時
 flutter test --coverage      # coverage/lcov.info が出る
 ```
 
-実測値（91件のテスト）:
+実測値（98件のテスト）:
 
 | ファイル | 行カバレッジ |
 |---|---|
@@ -39,12 +39,12 @@ flutter test --coverage      # coverage/lcov.info が出る
 | `capture_scheduler.dart` | 100.0% (9/9) |
 | `capture_naming.dart` | 100.0% (5/5) |
 | `capture_session.dart` | 99.0% (96/97) |
-| `drive_uploader.dart` | 98.0% (50/51) |
-| `main.dart` | 94.6% (122/129) |
+| `drive_uploader.dart` | 98.5% (65/66) |
+| `main.dart` | 93.1% (122/131) |
 | `wake_lock.dart` | 50.0% (4/8) |
 | `auth_gateway.dart` | **0.0%** (0/13) |
 | `photo_source.dart` | **0.0%** (0/31) |
-| 全体 | 85.0% (322/379) |
+| 全体 | 85.1% (337/396) |
 
 ### 0% を放置している理由
 
