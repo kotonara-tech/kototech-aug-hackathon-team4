@@ -1,0 +1,11 @@
+# Gradle
+.gradle/
+build/
+
+# ビルド機ごとに異なるため共有しない（sdk.dir を含む）
+local.properties
+
+# IDE
+.idea/
+*.iml
+captures/
