@@ -1,15 +1,14 @@
 package com.kotonara.farmcamera.domain
 
-import java.time.LocalDateTime
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.time.LocalDateTime
 
 /**
  * ファイル名規約は docs/02-google-drive.md 4.2 が正本。
  * Web 側は表示にしか使わないが、人間がデバッグで読むので規約を崩さない。
  */
 class PhotoNamingTest {
-
     @Test
     fun `CAM001_yyyyMMdd_HHmmss_jpg の形式で組み立てる`() {
         val name = buildPhotoFileName(CAMERA_ID, LocalDateTime.of(2026, 8, 22, 6, 30, 0))

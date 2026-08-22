@@ -19,20 +19,24 @@ import kotlinx.coroutines.tasks.await
  * になったらサービス内では解決できないため失敗として返す。`CaptureCoordinator` の
  * 直近エラーに載り、利用者にアプリを開いて再サインインを促す形になる。
  */
-class SilentDriveAuthorizer(private val context: Context) {
+class SilentDriveAuthorizer(
+    private val context: Context,
+) {
+    suspend fun accessToken(): Result<String> =
+        runCatching {
+            val request =
+                AuthorizationRequest
+                    .builder()
+                    .setRequestedScopes(listOf(Scope(DRIVE_APPDATA_SCOPE)))
+                    .build()
 
-    suspend fun accessToken(): Result<String> = runCatching {
-        val request = AuthorizationRequest.builder()
-            .setRequestedScopes(listOf(Scope(DRIVE_APPDATA_SCOPE)))
-            .build()
+            val result = Identity.getAuthorizationClient(context).authorize(request).await()
+            // 同意の解決画面が必要になった場合、Service には出す手段が無い。
+            // CredentialAuthGateway 側（Activity）での再サインインに委ねる。
+            check(!result.hasResolution()) { "drive.appdata の再同意が必要です。アプリを開いてサインインし直してください" }
 
-        val result = Identity.getAuthorizationClient(context).authorize(request).await()
-        // 同意の解決画面が必要になった場合、Service には出す手段が無い。
-        // CredentialAuthGateway 側（Activity）での再サインインに委ねる。
-        check(!result.hasResolution()) { "drive.appdata の再同意が必要です。アプリを開いてサインインし直してください" }
-
-        requireNotNull(result.accessToken) { "drive.appdata のアクセストークンを取得できませんでした" }
-    }
+            requireNotNull(result.accessToken) { "drive.appdata のアクセストークンを取得できませんでした" }
+        }
 
     private companion object {
         // CredentialAuthGateway.DRIVE_APPDATA_SCOPE と同じ値。両者は別クラスの private

@@ -17,4 +17,7 @@ interface AuthGateway {
      * （Play Services 側がキャッシュと更新を面倒見る）。
      */
     suspend fun accessToken(): Result<String>
+
+    /** 追加の認可 UI を表示せず、既存の Drive 認可だけを復元する。 */
+    suspend fun restoreAccessToken(): Result<String>
 }
