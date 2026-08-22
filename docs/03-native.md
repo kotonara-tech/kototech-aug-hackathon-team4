@@ -70,36 +70,75 @@ com.kotonara.farmcamera
 
 ## 4. パッケージ構成
 
+[01-overview.md 6.2 / 6.4](01-overview.md#6-開発規則native--web-共通) を Kotlin に
+具体化したものです。**依存は一方向**、**トップはエントリーポイントのみ**、
+**実装は `src/` 配下**。
+
 ```
-com.kotonara.farmcamera
-├── MainActivity.kt              Compose の画面。状態を購読して描画するだけの薄い層
-├── capture/
-│   ├── CaptureService.kt        Foreground Service。撮影ループの実行主体
-│   ├── CaptureScheduler.kt      間隔タイマーの抽象。開始時に即 1 回発火する
-│   ├── CaptureCoordinator.kt    撮影 → 保存 → 送信 の順序と二重起動防止
-│   ├── PhotoNaming.kt           CAM001_yyyyMMdd_HHmmss.jpg を組み立てる純粋関数
-│   └── PhotoSource.kt           カメラの抽象 + CameraX 実装
-├── auth/
-│   └── AuthGateway.kt           認証の抽象 + Credential Manager 実装
-├── drive/
-│   ├── PhotoUploader.kt         送信先の抽象
-│   └── AppDataUploader.kt       Drive API v3 実装（OkHttp）
-└── state/
-    └── CaptureState.kt          UI に出す状態のデータクラス + StateFlow
+native/app/
+├── build.gradle.kts                    ← ビルド設定のみ
+├── settings.gradle.kts
+└── src/
+    ├── main/kotlin/com/kotonara/farmcamera/
+    │   ├── MainActivity.kt             ★ エントリーポイント。組み立てて描画するだけ
+    │   ├── FarmCameraApp.kt            ★ Application。依存の生成と注入のみ
+    │   │
+    │   ├── domain/                     何にも依存しない。純粋な Kotlin だけ
+    │   │   ├── CaptureState.kt         UI に出す状態のデータクラス
+    │   │   ├── PhotoNaming.kt          CAM001_yyyyMMdd_HHmmss.jpg を組み立てる純粋関数
+    │   │   ├── CaptureScheduler.kt     間隔タイマーの interface
+    │   │   ├── PhotoSource.kt          カメラの interface
+    │   │   ├── AuthGateway.kt          認証の interface
+    │   │   ├── PhotoUploader.kt        送信先の interface
+    │   │   └── CaptureCoordinator.kt   撮影 → 保存 → 送信 の順序と二重起動防止
+    │   │
+    │   ├── data/                       domain の interface を実装する。外部に触る唯一の場所
+    │   │   ├── CameraXPhotoSource.kt    CameraX 実装
+    │   │   ├── CredentialAuthGateway.kt Credential Manager + AuthorizationClient 実装
+    │   │   ├── AppDataUploader.kt       Drive API v3 実装（OkHttp）
+    │   │   └── CoroutineCaptureScheduler.kt
+    │   │
+    │   └── presentation/               画面と、その状態
+    │       ├── CaptureViewModel.kt     StateFlow<CaptureState> を公開する
+    │       ├── CaptureScreen.kt        Compose の画面
+    │       └── CaptureService.kt       Foreground Service。Coordinator を回すだけ
+    │
+    └── test/kotlin/com/kotonara/farmcamera/
+        ├── domain/                     ← テストの主戦場。ここを厚く書く
+        └── data/
 ```
+
+### レイヤの規則
+
+| レイヤ | 依存してよい先 | Android SDK を触ってよいか |
+|---|---|---|
+| `domain` | **なし** | **不可。**`android.*` を import した時点で違反 |
+| `data` | `domain` のみ | 可（CameraX、Credential Manager、OkHttp） |
+| `presentation` | `domain` のみ | 可（Compose、Service） |
+
+- **`data` と `presentation` は互いを import しない**
+- `MainActivity` / `FarmCameraApp` は**依存を組み立てて渡すだけ**。ロジックを置かない
+
+> `domain` が `android.*` に依存しないことが、`./gradlew test` を実機なしで
+> 高速に回せる理由です。ここを崩すと Robolectric や実機テストが必要になり、
+> テストが遅く・不安定になります。
 
 ### 設計方針: ハードウェアと認証を抽象の裏に隠す
 
-`PhotoSource` / `AuthGateway` / `PhotoUploader` を **interface** として定義し、
-実装（CameraX / Credential Manager / OkHttp）を注入します。
+`PhotoSource` / `AuthGateway` / `PhotoUploader` / `CaptureScheduler` は
+**`domain` に interface として置き**、実装（CameraX / Credential Manager / OkHttp）は
+`data` に置いて注入します。
 
 **理由**: これらを直接呼ぶコードはユニットテストできません。抽象を挟むことで、
 撮影ロジックとスケジューリングとアップロードのリクエスト組み立てを、
 **実機なしでテストできます**（→ 9 節）。
 
-`MainActivity` は状態を購読して描画するだけの薄い層に保ってください。
+`CaptureScreen` は状態を購読して描画するだけの薄い層に保ってください。
 旧 Flutter 実装では `main.dart` の単一 Widget にロジックが集中し、
 テストが 1 件しか書けない状態になっていました。同じ轍を踏まないこと。
+
+**過剰にやらないこと。** UseCase クラスの量産、レイヤごとの DTO 詰め替え、
+Repository の上の Interactor——やりません。上の構成が上限です。
 
 ---
 
@@ -116,7 +155,7 @@ com.kotonara.farmcamera
 
 <application ...>
     <service
-        android:name=".capture.CaptureService"
+        android:name=".presentation.CaptureService"
         android:foregroundServiceType="camera"
         android:exported="false" />
 </application>
@@ -302,8 +341,14 @@ data class CaptureState(
 
 ## 9. テスト方針
 
-TDD（Red → Green → Refactor）。**テストを書かずに本体コードを追加しないこと。**
-テスト名は日本語で「何を保証するか」を書きます。
+**テストファーストです。テストファイルを先に作ってから実装してください。**
+Red → Green → Refactor。テスト名は日本語で「何を保証するか」を書きます。
+
+**単体テストのみ書きます。** Espresso / Compose UI テスト / Robolectric /
+実機を起動するテストは**書きません**（[01-overview.md 6.3](01-overview.md#63-テストファーストただし単体テストのみ)）。
+
+配置は `src/test/kotlin/...`（`androidTest` は使いません）。
+`domain` を最も厚く、`data` はフェイクに差し替えて、`presentation` は状態遷移のみ。
 
 ### 実機なしでテストできるもの（必ず書く）
 
@@ -327,23 +372,54 @@ TDD（Red → Green → Refactor）。**テストを書かずに本体コード�
 
 ### 禁止
 
-**外部 API を叩くテストを書かないこと。** Drive API は MockWebServer に差し替えます。
-ネットワークに依存するテストは、当日必ず落ちます。
+- **外部 API を叩くテストを書かないこと。** Drive API は MockWebServer に差し替えます。
+  ネットワークに依存するテストは、当日必ず落ちます
+- **結合テスト・E2E・UI テストを書かないこと。** 単体テストのみです
+- **`domain` のテストで `android.*` を import しないこと。** 必要になったら、
+  それは `domain` に Android 依存が漏れているというサインです
 
 ---
 
-## 10. 開発コマンド
+## 10. lint
+
+**プロジェクト作成時に整備します。** 後回しにすると、既存コードの違反が溜まって
+導入できなくなります。
+
+- **ktlint**（Gradle プラグイン）を導入し、`./gradlew ktlintCheck` で検査できる状態にする
+- Android Lint（`./gradlew lint`）も併せて通しておく
+
+**lint が落ちた状態で「完了」と言わないでください**
+（[01-overview.md 6.1](01-overview.md#61-ci-は回さない最後のテストが唯一のリリース障壁である)）。
+
+---
+
+## 11. 開発コマンド
 
 ```bash
+./gradlew ktlintCheck          # lint
+./gradlew test                 # 単体テスト
 ./gradlew assembleDebug        # ビルド
 ./gradlew installDebug         # 実機へインストール
-./gradlew test                 # ユニットテスト
 adb devices                    # 実機接続の確認
 adb logcat -s FarmCamera       # ログ確認
 ```
 
+### 完了の定義
+
+**CI は回しません。** 壊れたコードを止める仕組みは、実装者が最後に自分で回す
+これらのコマンドしかありません。
+
+```
+1. ./gradlew ktlintCheck    が通る
+2. ./gradlew test           が全件通る
+3. ./gradlew assembleDebug  が通る
+```
+
+**3 つすべてを実際に実行し、出力を確認してから「できた」と言ってください。**
+
 > 開発機は **Windows / PowerShell 5.1** です。`&&` は使えません。
 > `;` か `if ($?) { ... }` を使ってください。
+> 例: `.\gradlew ktlintCheck; if ($?) { .\gradlew test }`
 
 ### 署名鍵の注意
 
@@ -359,7 +435,7 @@ keytool -list -v -keystore %USERPROFILE%\.android\debug.keystore -alias androidd
 
 ---
 
-## 11. 実装時の注意
+## 12. 実装時の注意
 
 - **エラーを握り潰さないこと。**送信失敗は画面に出します。ログだけに出して黙ると、
   「動いているように見えて 1 枚も上がっていない」状態になります
