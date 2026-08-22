@@ -1,3 +1,7 @@
+> **廃止。この文書は旧方針（マイドライブ直下 `FarmCameraPOC` + `drive.file` / `drive.readonly`）で
+> 書かれており、現在の設計とは一致しません。設計正本は `docs/` です。**
+> 経緯は [legacy/README.md](../README.md) / [Q2](../../docs/00-openquestion.md) を参照。
+
 # 定点カメラ写真ビューアー（Web）
 
 農家向け定点カメラアプリの **Web 側**。Android アプリが Google ドライブに保存した
