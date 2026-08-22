@@ -22,4 +22,20 @@ class TorchScheduleTest {
 
         assertTrue(settings.shouldEnableAt(LocalTime.MIDNIGHT))
     }
+
+    @Test
+    fun `自動モードが無効なら手動設定に従う`() {
+        assertTrue(TorchSettings(manualEnabled = true).shouldEnableAt(LocalTime.NOON))
+        assertFalse(TorchSettings(manualEnabled = false).shouldEnableAt(LocalTime.NOON))
+    }
+
+    @Test
+    fun `日中の時間帯は開始を含み終了を含まない`() {
+        val settings = TorchSettings(automaticEnabled = true, startTime = LocalTime.of(9, 0), endTime = LocalTime.of(17, 0))
+
+        assertFalse(settings.shouldEnableAt(LocalTime.of(8, 59)))
+        assertTrue(settings.shouldEnableAt(LocalTime.of(9, 0)))
+        assertTrue(settings.shouldEnableAt(LocalTime.of(16, 59)))
+        assertFalse(settings.shouldEnableAt(LocalTime.of(17, 0)))
+    }
 }

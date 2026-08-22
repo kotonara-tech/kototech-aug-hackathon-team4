@@ -24,12 +24,7 @@ object CapturePhotoGallery {
     }
 
     private fun listCaptureFiles(context: Context): List<File> =
-        File(context.filesDir, CAPTURE_DIRECTORY)
-            .listFiles()
-            .orEmpty()
-            .filter { it.isFile && it.extension.equals("jpg", ignoreCase = true) }
-            .sortedByDescending(File::lastModified)
-            .take(MAX_PHOTOS)
+        CapturePhotoFiles.newest(File(context.filesDir, CAPTURE_DIRECTORY), MAX_PHOTOS)
 }
 
 /** 撮影結果をアプリ専用領域へ保存し、上限を超えた古い JPEG を削除する。 */
@@ -38,12 +33,7 @@ class AppPhotoStore(
 ) : LocalPhotoStore {
     suspend fun savedPhotos(): List<File> =
         withContext(Dispatchers.IO) {
-            File(context.filesDir, CAPTURE_DIRECTORY)
-                .listFiles()
-                .orEmpty()
-                .filter { it.isFile && it.extension.equals("jpg", ignoreCase = true) }
-                .sortedByDescending(File::lastModified)
-                .take(MAX_PHOTOS)
+            CapturePhotoFiles.newest(File(context.filesDir, CAPTURE_DIRECTORY), MAX_PHOTOS)
         }
 
     suspend fun readPhoto(photo: File): ByteArray = withContext(Dispatchers.IO) { photo.readBytes() }
@@ -56,17 +46,36 @@ class AppPhotoStore(
             withContext(Dispatchers.IO) {
                 val directory = File(context.filesDir, CAPTURE_DIRECTORY).apply { mkdirs() }
                 File(directory, fileName).writeBytes(jpeg)
-                val photos =
-                    directory
-                        .listFiles()
-                        .orEmpty()
-                        .filter { it.isFile && it.extension.equals("jpg", ignoreCase = true) }
-                        .sortedByDescending(File::lastModified)
-                photos.drop(MAX_PHOTOS).forEach(File::delete)
-                CapturePhotoGallery.replace(photos.take(MAX_PHOTOS))
+                CapturePhotoGallery.replace(CapturePhotoFiles.pruneToNewest(directory, MAX_PHOTOS))
             }
         }
 }
 
 private const val CAPTURE_DIRECTORY = "captures"
 private const val MAX_PHOTOS = 100
+
+/** Android Contextなしで検証できる、JPEG一覧と保持上限の規則。 */
+internal object CapturePhotoFiles {
+    fun newest(
+        directory: File,
+        maximum: Int,
+    ): List<File> =
+        allJpegs(directory)
+            .take(maximum)
+
+    fun pruneToNewest(
+        directory: File,
+        maximum: Int,
+    ): List<File> {
+        val photos = allJpegs(directory)
+        photos.drop(maximum).forEach(File::delete)
+        return photos.take(maximum)
+    }
+
+    private fun allJpegs(directory: File): List<File> =
+        directory
+            .listFiles()
+            .orEmpty()
+            .filter { it.isFile && it.extension.equals("jpg", ignoreCase = true) }
+            .sortedByDescending(File::lastModified)
+}
