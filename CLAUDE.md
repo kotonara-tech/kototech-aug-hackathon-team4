@@ -86,7 +86,10 @@ GitHub Actions などの CI は**使いません。** 壊れたコードを止�
 ### その他
 
 - **テストファースト。**テストファイルを先に作ってから実装します（Red → Green → Refactor）
-- **単体テストのみ。**結合テスト・E2E・UI テスト（Playwright / Espresso / Robolectric）は書きません
+- **単体テストが基本。**結合テスト・E2E・UI テスト（Playwright / Espresso / Robolectric）は書きません。
+  **例外**: ハードウェアの実挙動に依存する機能（Native のトーチ制御など）に限り、実機接続の
+  `androidTest` を書きます（→ docs/03-native.md 9 節）。この場合 DoD の「単体テスト」は
+  `./gradlew test` に加えて `./gradlew connectedAndroidTest`（実機接続時）も含みます
 - **テスト名は日本語で「何を保証するか」を書きます**
 - **外部 API を叩くテストを書かないこと。**Drive API はフェイクに差し替えます。
   ネットワークに依存するテストは、当日必ず落ちます
