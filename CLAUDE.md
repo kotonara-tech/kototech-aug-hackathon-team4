@@ -62,10 +62,38 @@
 
 ## 5. 譲れない開発ルール
 
-- **TDD で進めます。**Red → Green → Refactor。テストを書かずに本体コードを追加しないこと
+詳細は [docs/01-overview.md 6 節](docs/01-overview.md#6-開発規則native--web-共通)。
+**Native / Web の両方に等しく適用されます。**
+
+### CI は回さない。最後のテストが唯一のリリース障壁
+
+GitHub Actions などの CI は**使いません。** 壊れたコードを止める仕組みは、
+**実装者が最後に自分で回すテストしかありません。**
+
+**したがって、目標は「それらしいコード」ではなく「テストが通る、動くコード」です。**
+
+```
+完了の定義（Definition of Done）
+  1. lint が通る          Native: ./gradlew ktlintCheck   Web: npm run lint
+  2. 単体テストが全件通る   Native: ./gradlew test          Web: npm run test
+  3. ビルドが通る          Native: ./gradlew assembleDebug Web: npm run build
+```
+
+**3 つすべてを実際に実行し、出力を確認してから「できた」と言うこと。**
+実行せずに完了を宣言しないこと。
+
+### その他
+
+- **テストファースト。**テストファイルを先に作ってから実装します（Red → Green → Refactor）
+- **単体テストのみ。**結合テスト・E2E・UI テスト（Playwright / Espresso / Robolectric）は書きません
 - **テスト名は日本語で「何を保証するか」を書きます**
 - **外部 API を叩くテストを書かないこと。**Drive API はフェイクに差し替えます。
   ネットワークに依存するテストは、当日必ず落ちます
+- **Clean Architecture は「依存は一方向」だけを採る。**
+  `domain`（何にも依存しない）← `data` / `presentation`。`data` と `presentation` は互いを import しない。
+  **実態は MVVM 程度の軽いディレクトリ分割に留めること。**UseCase の量産も DTO 詰め替えもしません
+- **実装は `src/` 配下に置く。**トップディレクトリはエントリーポイントと設定ファイルのみ
+- **lint はプロジェクト作成時に整備する。**後回しにすると違反が溜まって導入できなくなります
 - **`.env` / `.env.local` は絶対にコミットしないこと**
 - **開発機は Windows / PowerShell 5.1。**`&&` は使えません。`;` か `if ($?) { ... }` を使うこと
 - **YAGNI を守ること。**画面は Native も Web も 1 枚です。状態管理ライブラリもキューも要りません

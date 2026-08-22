@@ -65,23 +65,35 @@ Drive とのやりとりの契約は [02-google-drive.md](02-google-drive.md) �
 
 ## 4. ディレクトリ構成
 
+[01-overview.md 6.2 / 6.4](01-overview.md#6-開発規則native--web-共通) を
+React / TypeScript に具体化したものです。**依存は一方向**、
+**トップはエントリーポイントのみ**、**実装は `src/` 配下**。
+
 ```
 web/
-├── index.html
+├── index.html                  ← 設定・エントリーポイントのみ。ロジックを置かない
 ├── vite.config.ts
+├── eslint.config.js
+├── tsconfig.json
+├── package.json
 ├── .env.local                  VITE_GOOGLE_CLIENT_ID（★ コミット禁止）
 ├── .env.example
 └── src/
-    ├── main.tsx
-    ├── App.tsx                 画面の組み立てのみ
-    ├── auth/
-    │   └── useGoogleAuth.ts    GIS トークンクライアントの薄いラッパ
-    ├── drive/
-    │   ├── driveClient.ts      Drive API の呼び出し（listPhotos / fetchPhotoBlob）
-    │   └── photo.ts            Photo 型 と resolveCapturedAt()（純粋関数）
-    ├── hooks/
-    │   └── usePolling.ts       間隔可変のポーリング
-    └── components/
+    ├── main.tsx                ★ エントリーポイント。createRoot して App を描くだけ
+    ├── App.tsx                 ★ 組み立てのみ。ロジックを置かない
+    │
+    ├── domain/                 何にも依存しない。純粋な TypeScript だけ
+    │   ├── photo.ts            Photo 型
+    │   ├── resolveCapturedAt.ts   撮影時刻の決定（純粋関数）
+    │   ├── driveQuery.ts       files.list のクエリ組み立て（純粋関数）
+    │   └── ports.ts            PhotoRepository / AuthPort の型定義（interface）
+    │
+    ├── data/                   domain の型を実装する。fetch に触る唯一の場所
+    │   ├── driveClient.ts      listPhotos / fetchPhotoBlob（Drive API v3）
+    │   └── googleAuth.ts       GIS トークンクライアントの薄いラッパ
+    │
+    └── presentation/           画面と、その状態
+        ├── usePhotoPolling.ts  ポーリングと状態を持つフック（ViewModel 相当）
         ├── LoginGate.tsx       未ログイン時の画面
         ├── LatestPhoto.tsx     最新写真の大表示
         ├── PhotoGrid.tsx       サムネイル一覧
@@ -90,13 +102,33 @@ web/
         └── ErrorBanner.tsx     エラー表示
 ```
 
+テストは実装ファイルと同階層に `*.test.ts(x)` で置きます
+（例: `src/domain/resolveCapturedAt.test.ts`）。
+
+### レイヤの規則
+
+| レイヤ | 中身 | 依存してよい先 | ブラウザ API を触ってよいか |
+|---|---|---|---|
+| `domain` | 型、純粋関数、port の interface | **なし** | **不可。**`fetch` / `window` / React すら import しない |
+| `data` | `domain` の port の実装 | `domain` のみ | 可（`fetch`、GIS） |
+| `presentation` | フックとコンポーネント | `domain` のみ | 可（React、DOM） |
+
+- **`data` と `presentation` は互いを import しない。**
+  実装は `main.tsx` で生成し、`presentation` へ port 型として渡します
+- `main.tsx` / `App.tsx` は**組み立てるだけ**。ロジックを置かない
+
+> `domain` が React にも `fetch` にも依存しないことが、
+> テストを最も速く・最も安定して回せる理由です。
+
 ### 設計方針: 純粋関数を切り出してテストする
 
-`resolveCapturedAt()`（撮影時刻の決定）と、Drive のクエリ組み立ては
-**副作用のない関数**として切り出してください。ここがバグの温床であり、
-かつネットワークなしでテストできる部分です。
+`resolveCapturedAt()`（撮影時刻の決定）と Drive のクエリ組み立ては、
+**副作用のない関数として `domain` に置いてください。**
+ここがバグの温床であり、かつネットワークなしでテストできる部分です。
 
-`App.tsx` は組み立てるだけの薄い層に保ってください。
+**過剰にやらないこと。** UseCase クラスの量産、レイヤごとの DTO 詰め替え、
+Repository の上の Interactor——やりません。上の構成が上限です。
+実態は **MVVM 程度の軽いディレクトリ分割**です。
 
 ---
 
@@ -297,8 +329,14 @@ EXIF が無いと「朝 6 時の写真」が「夕方 18 時」と表示され�
 
 ## 10. テスト方針
 
-TDD（Red → Green → Refactor）。**テストを書かずに本体コードを追加しないこと。**
-テスト名は日本語で「何を保証するか」を書きます。
+**テストファーストです。テストファイルを先に作ってから実装してください。**
+Red → Green → Refactor。テスト名は日本語で「何を保証するか」を書きます。
+
+**単体テストのみ書きます。** Playwright / Cypress / ブラウザを起動する E2E は
+**書きません**（[01-overview.md 6.3](01-overview.md#63-テストファーストただし単体テストのみ)）。
+
+`domain` を最も厚く、`data` は `fetch` をフェイクに差し替えて、
+`presentation` は状態遷移のみ。**見た目のテストは書きません。**
 
 ### 必ず書くテスト
 
@@ -319,28 +357,61 @@ TDD（Red → Green → Refactor）。**テストを書かずに本体コード�
 
 ### 禁止
 
-**外部 API を叩くテストを書かないこと。** `fetch` はフェイクに差し替えます。
-ネットワークに依存するテストは、当日必ず落ちます。
+- **外部 API を叩くテストを書かないこと。** `fetch` はフェイクに差し替えます。
+  ネットワークに依存するテストは、当日必ず落ちます
+- **E2E・ブラウザ起動テストを書かないこと。** 単体テストのみです
+- **`domain` のテストで React や `fetch` を import しないこと。** 必要になったら、
+  それは `domain` に外部依存が漏れているというサインです
 
 ---
 
-## 11. 開発コマンド
+## 11. lint
+
+**プロジェクト作成時に整備します。** 後回しにすると、既存コードの違反が溜まって
+導入できなくなります。
+
+- **ESLint + typescript-eslint + Prettier** を導入する
+- `npm run lint` の 1 コマンドで検査できる状態にする
+- `tsc --noEmit` による型チェックも通しておく（`npm run typecheck`）
+
+**lint が落ちた状態で「完了」と言わないでください**
+（[01-overview.md 6.1](01-overview.md#61-ci-は回さない最後のテストが唯一のリリース障壁である)）。
+
+---
+
+## 12. 開発コマンド
 
 ```bash
 npm install
-npm run dev       # http://localhost:5173
-npm run build     # 静的ファイルを dist/ に出力
-npm run test
+npm run lint       # ESLint + Prettier
+npm run typecheck  # tsc --noEmit
+npm run test       # Vitest（単体テストのみ）
+npm run build      # 静的ファイルを dist/ に出力
+npm run dev        # http://localhost:5173
 ```
+
+### 完了の定義
+
+**CI は回しません。** 壊れたコードを止める仕組みは、実装者が最後に自分で回す
+これらのコマンドしかありません。
+
+```
+1. npm run lint       が通る
+2. npm run test       が全件通る
+3. npm run build      が通る
+```
+
+**3 つすべてを実際に実行し、出力を確認してから「できた」と言ってください。**
 
 > 開発機は **Windows / PowerShell 5.1** です。`&&` は使えません。
 > `;` か `if ($?) { ... }` を使ってください。
+> 例: `npm run lint; if ($?) { npm run test }`
 
 > **`.env.local` は絶対にコミットしないこと。**
 
 ---
 
-## 12. 実装時の注意
+## 13. 実装時の注意
 
 - **`spaces=appDataFolder` の付け忘れは静かに失敗します。**
   エラーではなく 0 件が返るため「実装が動いていない」ように見えます。
