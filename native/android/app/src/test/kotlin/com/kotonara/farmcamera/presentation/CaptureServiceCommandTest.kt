@@ -11,6 +11,9 @@ class CaptureServiceCommandTest {
     fun `開始停止と未知の Intent を区別する`() {
         assertEquals(CaptureServiceCommand.START, captureServiceCommand(CaptureService.ACTION_START))
         assertEquals(CaptureServiceCommand.STOP, captureServiceCommand(CaptureService.ACTION_STOP))
+        assertEquals(CaptureServiceCommand.UPLOAD_SAVED, captureServiceCommand(CaptureService.ACTION_UPLOAD_SAVED))
+        assertEquals(CaptureServiceCommand.REFRESH_TORCH, captureServiceCommand(CaptureService.ACTION_REFRESH_TORCH))
+        assertEquals(CaptureServiceCommand.IGNORE, captureServiceCommand(null))
         assertEquals(CaptureServiceCommand.IGNORE, captureServiceCommand("unknown"))
     }
 
