@@ -49,7 +49,7 @@ export function PhotoViewer({ photos, current, onNavigate, onClose }: Props) {
         {current.objectUrl ? (
           <img src={current.objectUrl} alt={current.name} />
         ) : (
-          <div className="latest-placeholder">画像を取得しています…</div>
+          <div className="latest-placeholder viewer-placeholder">画像を取得しています…</div>
         )}
       </div>
 

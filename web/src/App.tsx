@@ -107,19 +107,21 @@ export function App({ auth, drive, banner, footer, refreshSignal = 0 }: AppProps
 
   if (!auth.accessToken) {
     return (
-      <>
+      <div className="app">
         {banner}
-        <main className="wrap">
+        <main className="wrap wrap-gate">
           <ErrorBanner message={notice?.message ?? auth.error} tone={notice?.tone ?? 'error'} />
           <LoginGate onSignIn={auth.signIn} />
           {footer}
         </main>
-      </>
+      </div>
     );
   }
 
+  const hasPhotos = visiblePhotos.length > 0;
+
   return (
-    <>
+    <div className="app">
       {banner}
 
       <header className="appbar">
@@ -146,12 +148,22 @@ export function App({ auth, drive, banner, footer, refreshSignal = 0 }: AppProps
           lastFetchedAt={lastFetchedAt}
         />
 
-        {visiblePhotos.length > 0 && <LatestPhoto photo={visiblePhotos[0]} />}
+        {/* 1 画面に収める要。ここから下が残りの高さを分け合う。
+            伸び縮みするのは写真と一覧だけ、スクロールするのは一覧だけ */}
+        <div className={hasPhotos ? 'stage' : 'stage stage-empty'}>
+          {hasPhotos && <LatestPhoto photo={visiblePhotos[0]} />}
 
-        <h2 className="section">
-          撮影一覧 <span className="section-note">（新しい順・クリックで拡大）</span>
-        </h2>
-        <PhotoGrid photos={visiblePhotos} onSelect={(photo) => setSelectedId(photo.id)} />
+          <aside className="rail">
+            {hasPhotos && (
+              <h2 className="section">
+                撮影一覧 <span className="section-note">（新しい順・クリックで拡大）</span>
+              </h2>
+            )}
+            <div className="rail-body">
+              <PhotoGrid photos={visiblePhotos} onSelect={(photo) => setSelectedId(photo.id)} />
+            </div>
+          </aside>
+        </div>
 
         {footer}
       </main>
@@ -164,6 +176,6 @@ export function App({ auth, drive, banner, footer, refreshSignal = 0 }: AppProps
           onClose={() => setSelectedId(null)}
         />
       )}
-    </>
+    </div>
   );
 }
