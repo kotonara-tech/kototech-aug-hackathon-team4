@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>定点観測ビューアー</title>
+    <!--
+      Google Identity Services。トークンクライアント方式で
+      アクセストークンだけを取る（リフレッシュトークンは取れない）。
+      → docs/04-frontend.md 5 節
+    -->
+    <script src="https://accounts.google.com/gsi/client" async></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

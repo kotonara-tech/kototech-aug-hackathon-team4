@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>定点観測ビューアー — デモ画面</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --panel:#ffffff; --line:#dfe3e8; --fg:#1b1f24; --muted:#5b6672;
+    --accent:#2f6feb; --accent-fg:#ffffff; --warn:#8a5a00; --warn-bg:#fff4d6; --warn-line:#e8c96a;
+    --err:#8c1d18; --err-bg:#fdecea; --err-line:#f0b4ae;
+    --demo-bg:#eef2ff; --demo-line:#c7d2fe; --demo-fg:#3730a3;
+    --shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px rgba(16,24,40,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0f1216; --panel:#171b21; --line:#2a313a; --fg:#e6e9ee; --muted:#9aa6b2;
+      --accent:#4c8dff; --accent-fg:#0b0f14; --warn:#f0c674; --warn-bg:#332a12; --warn-line:#5c4a1c;
+      --err:#ffb4ab; --err-bg:#3a1d1a; --err-line:#6b2f28;
+      --demo-bg:#1b1f3a; --demo-line:#333b6b; --demo-fg:#c7d2fe;
+      --shadow:0 1px 2px rgba(0,0,0,.5),0 8px 24px rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="dark"]{
+      --bg:#0f1216; --panel:#171b21; --line:#2a313a; --fg:#e6e9ee; --muted:#9aa6b2;
+      --accent:#4c8dff; --accent-fg:#0b0f14; --warn:#f0c674; --warn-bg:#332a12; --warn-line:#5c4a1c;
+      --err:#ffb4ab; --err-bg:#3a1d1a; --err-line:#6b2f28;
+      --demo-bg:#1b1f3a; --demo-line:#333b6b; --demo-fg:#c7d2fe;
+      --shadow:0 1px 2px rgba(0,0,0,.5),0 8px 24px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:"Segoe UI","Hiragino Kaku Gothic ProN","Noto Sans JP",Meiryo,system-ui,sans-serif;
+    font-size:15px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1100px;margin:0 auto;padding:0 16px 64px}
+
+  header.appbar{position:sticky;top:0;z-index:20;background:var(--panel);border-bottom:1px solid var(--line)}
+  .appbar-in{max-width:1100px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .brand{font-weight:700;font-size:17px;letter-spacing:.02em;display:flex;align-items:center;gap:8px}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.18)}
+  .brand .dot.off{background:#94a3b8;box-shadow:0 0 0 3px rgba(148,163,184,.18)}
+  .spacer{flex:1 1 auto}
+  .account{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:8px}
+  .avatar{width:26px;height:26px;border-radius:50%;background:var(--accent);color:var(--accent-fg);
+          display:grid;place-items:center;font-size:12px;font-weight:700}
+
+  .demoflag{background:var(--demo-bg);border-bottom:1px solid var(--demo-line);color:var(--demo-fg);font-size:13px}
+  .demoflag .in{max-width:1100px;margin:0 auto;padding:7px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .banner{border-radius:10px;padding:10px 14px;margin:14px 0;font-size:14px}
+  .banner.warn{background:var(--warn-bg);border:1px solid var(--warn-line);color:var(--warn)}
+  .banner.err{background:var(--err-bg);border:1px solid var(--err-line);color:var(--err)}
+
+  .toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin:16px 0;box-shadow:var(--shadow)}
+  .field{display:flex;align-items:center;gap:7px;font-size:14px;color:var(--muted)}
+  select,button{font:inherit;color:var(--fg)}
+  select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+  button{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 14px;cursor:pointer;
+    transition:background .12s,border-color .12s}
+  button:hover:not(:disabled){border-color:var(--accent)}
+  button:disabled{opacity:.5;cursor:default}
+  button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);font-weight:600}
+  button.primary:hover:not(:disabled){filter:brightness(1.06)}
+  .stamp{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .spin{display:inline-block;width:13px;height:13px;border:2px solid var(--line);border-top-color:var(--accent);
+    border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+
+  .latest{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
+  .latest img{display:block;width:100%;height:auto;background:#000}
+  .latest .meta{padding:12px 16px;display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;border-top:1px solid var(--line)}
+  .cap{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
+  .capsrc{font-size:12px;color:var(--muted)}
+  .capsrc.fallback{color:var(--warn);font-weight:600}
+  .fname{margin-left:auto;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--muted)}
+
+  h2.sec{font-size:14px;color:var(--muted);font-weight:600;margin:26px 0 10px;letter-spacing:.04em}
+  .count{font-weight:400}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .thumb{position:relative;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;
+    background:var(--panel);cursor:pointer;line-height:0}
+  .thumb img{width:100%;height:auto;display:block;aspect-ratio:16/9;object-fit:cover}
+  .thumb .t{position:absolute;left:0;right:0;bottom:0;padding:5px 7px;font-size:11.5px;line-height:1.3;
+    color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.78));text-align:left;font-variant-numeric:tabular-nums}
+  .thumb.newest{outline:2px solid var(--accent);outline-offset:-2px}
+  .thumb .badge{position:absolute;top:6px;left:6px;background:var(--accent);color:var(--accent-fg);
+    font-size:10.5px;font-weight:700;padding:2px 6px;border-radius:999px;line-height:1.4}
+
+  .empty,.gate{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:44px 24px;text-align:center;box-shadow:var(--shadow)}
+  .gate{margin-top:64px}
+  .gate h1{font-size:22px;margin:0 0 6px}
+  .gate p{color:var(--muted);margin:0 auto 22px;max-width:46ch;font-size:14px}
+  .empty h3{margin:0 0 6px;font-size:17px}
+  .empty p{color:var(--muted);margin:0;font-size:14px}
+  .gicon{width:18px;height:18px;vertical-align:-4px;margin-right:8px}
+
+  .viewer{position:fixed;inset:0;z-index:50;background:rgba(8,10,14,.88);display:grid;
+    grid-template-rows:auto 1fr auto;gap:12px;padding:14px}
+  .viewer .vtop{display:flex;align-items:center;gap:12px;color:#e6e9ee;flex-wrap:wrap}
+  .viewer .vtop .fname{color:#9aa6b2;margin-left:0}
+  .viewer .vbody{display:grid;place-items:center;min-height:0}
+  .viewer img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px}
+  .viewer .vbot{display:flex;justify-content:center;gap:10px;color:#9aa6b2;font-size:13px;align-items:center}
+  .viewer button{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.22);color:#e6e9ee}
+  .viewer .vtitle{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}
+
+  .devbar{margin-top:34px;border:1px dashed var(--demo-line);background:var(--demo-bg);color:var(--demo-fg);
+    border-radius:12px;padding:12px 14px}
+  .devbar h3{margin:0 0 8px;font-size:12.5px;letter-spacing:.06em;font-weight:700}
+  .devbar .row{display:flex;gap:8px;flex-wrap:wrap}
+  .devbar button{background:var(--panel);border-color:var(--demo-line);font-size:13px;padding:5px 11px}
+  .devbar p{margin:9px 0 0;font-size:12.5px;opacity:.85}
+
+  @media (max-width:560px){
+    .grid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+    .cap{font-size:17px}
+    .fname{margin-left:0;width:100%}
+  }
+</style>
+</head>
+<body>
+<div class="demoflag"><div class="in">
+  <strong>デモモード</strong>
+  <span>Google Drive には接続していません。表示中の画像はブラウザ内で生成した合成データです。</span>
+</div></div>
+
+<header class="appbar"><div class="appbar-in" id="appbar"></div></header>
+<div class="wrap"><main id="main"></main></div>
+<div id="viewer"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ============================================================
+     定点観測ビューアー デモ画面
+     docs/04-frontend.md 9 節の画面構成を、ビルド不要で再現したもの。
+     Drive API は呼ばない。画像は canvas で合成する。
+     ネットワークにも Node.js にも依存しない。
+     ============================================================ */
+
+  var CAPTURE_INTERVAL_MIN = 5;             // Q3 暫定
+  var POLL_OPTIONS = [10, 30, 60, 300];     // Q4 暫定
+  var DEFAULT_POLL_SEC = 30;                // Q4 暫定
+  var CAMERA_ID = 'CAM001';                 // 02-google-drive.md 4.2（1端末契約の固定値）
+  var INITIAL_COUNT = 36;
+  var SERIES_START = new Date(2026, 7, 22, 6, 0, 0);   // 2026-08-22 06:00
+  var IMG_W = 800, IMG_H = 450;
+
+  // ============================================================
+  // 1. 合成画像（Drive から取得する JPEG の代役）
+  // ============================================================
+
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function hexOf(h) {
+    return [parseInt(h.substr(1, 2), 16), parseInt(h.substr(3, 2), 16), parseInt(h.substr(5, 2), 16)];
+  }
+  function mix(a, b, t) {
+    var A = hexOf(a), B = hexOf(b);
+    return 'rgb(' + Math.round(A[0] + (B[0] - A[0]) * t) + ','
+                  + Math.round(A[1] + (B[1] - A[1]) * t) + ','
+                  + Math.round(A[2] + (B[2] - A[2]) * t) + ')';
+  }
+  // 定点である以上、株の位置は毎回同じでなければならない。seq に依存しない疑似乱数を使う。
+  function noise(seed) {
+    var x = Math.sin(seed * 12.9898) * 43758.5453;
+    return x - Math.floor(x);
+  }
+
+  function drawPlant(g, x, y, s, day, sway) {
+    var dark = mix('#1d3320', '#4c8f3a', day);
+    var light = mix('#2b4a2b', '#8ac95c', day);
+    g.save();
+    g.translate(x, y);
+    g.scale(s, s);
+    g.strokeStyle = dark; g.lineWidth = 2.6; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(sway * 0.5, -17, sway, -33); g.stroke();
+    for (var k = 0; k < 5; k++) {
+      var a = -Math.PI / 2 + (k - 2) * 0.58 + sway * 0.02;
+      var len = 21 - Math.abs(k - 2) * 3.2;
+      g.fillStyle = (k % 2) ? light : dark;
+      g.beginPath();
+      g.ellipse(Math.cos(a) * len * 0.5, -19 + Math.sin(a) * len * 0.5, len * 0.55, 5.4, a, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.restore();
+  }
+
+  function renderScene(seq, date) {
+    var c = document.createElement('canvas');
+    c.width = IMG_W; c.height = IMG_H;
+    var g = c.getContext('2d');
+    var hours = date.getHours() + date.getMinutes() / 60;
+    var day = clamp((hours - 5) / 6, 0, 1);            // 5時=夜明け 〜 11時=朝
+    var horizon = IMG_H * 0.62;
+
+    var sky = g.createLinearGradient(0, 0, 0, horizon);
+    sky.addColorStop(0.00, mix('#16233f', '#3f86cf', day));
+    sky.addColorStop(0.55, mix('#6d4f6b', '#96c9ee', day));
+    sky.addColorStop(1.00, mix('#e0895a', '#dceffa', day));
+    g.fillStyle = sky; g.fillRect(0, 0, IMG_W, horizon);
+
+    var sx = IMG_W * (0.16 + day * 0.62), sy = horizon - day * horizon * 0.72;
+    var glow = g.createRadialGradient(sx, sy, 2, sx, sy, 120);
+    glow.addColorStop(0, 'rgba(255,240,200,' + (0.55 + day * 0.35) + ')');
+    glow.addColorStop(1, 'rgba(255,220,160,0)');
+    g.fillStyle = glow; g.beginPath(); g.arc(sx, sy, 120, 0, Math.PI * 2); g.fill();
+    g.fillStyle = mix('#ffbe7a', '#fffbe8', day);
+    g.beginPath(); g.arc(sx, sy, 15, 0, Math.PI * 2); g.fill();
+
+    g.globalAlpha = 0.30 + day * 0.22;
+    for (var ci = 0; ci < 5; ci++) {
+      var cx = ((noise(ci * 7 + 3) * IMG_W) + seq * 1.1) % (IMG_W + 200) - 100;
+      var cy = 24 + noise(ci * 13 + 5) * horizon * 0.42;
+      var cw = 46 + noise(ci * 3 + 11) * 62;
+      g.fillStyle = mix('#8c93a8', '#ffffff', day);
+      for (var p = 0; p < 4; p++) {
+        g.beginPath();
+        g.ellipse(cx + p * cw * 0.42, cy + noise(ci * 31 + p) * 7, cw * 0.5, cw * 0.22, 0, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+    g.globalAlpha = 1;
+
+    g.fillStyle = mix('#1a2430', '#7d94a6', day);
+    g.beginPath(); g.moveTo(0, horizon);
+    for (var mx = 0; mx <= IMG_W; mx += 40) {
+      g.lineTo(mx, horizon - 26 - noise(mx * 0.11) * 34);
+    }
+    g.lineTo(IMG_W, horizon); g.closePath(); g.fill();
+
+    var ground = g.createLinearGradient(0, horizon, 0, IMG_H);
+    ground.addColorStop(0, mix('#2c3324', '#6f7d43', day));
+    ground.addColorStop(1, mix('#1d1913', '#4b3d29', day));
+    g.fillStyle = ground; g.fillRect(0, horizon, IMG_W, IMG_H - horizon);
+
+    g.strokeStyle = 'rgba(0,0,0,' + (0.26 - day * 0.10) + ')'; g.lineWidth = 1.4;
+    for (var u = -3; u <= 3; u++) {
+      g.beginPath();
+      g.moveTo(IMG_W / 2 + u * 22, horizon + 2);
+      g.lineTo(IMG_W / 2 + u * 240, IMG_H);
+      g.stroke();
+    }
+
+    var growth = seq * 0.0016;
+    for (var row = 0; row < 5; row++) {
+      var f = (row + 1) / 5;
+      var ry = horizon + Math.pow(f, 1.7) * (IMG_H - horizon) * 0.97;
+      var s = (0.30 + Math.pow(f, 1.5) * 1.25) * (1 + growth);
+      var n = 12 - row * 2;
+      for (var i = 0; i < n; i++) {
+        var px = (i + 0.5) / n * IMG_W + (noise(row * 100 + i) - 0.5) * 26;
+        var sway = Math.sin(seq * 0.6 + row + i * 0.4) * 3.2;
+        drawPlant(g, px, ry, s, day, sway);
+      }
+    }
+
+    var vig = g.createRadialGradient(IMG_W / 2, IMG_H / 2, IMG_H * 0.35, IMG_W / 2, IMG_H / 2, IMG_H * 0.92);
+    vig.addColorStop(0, 'rgba(0,0,0,0)');
+    vig.addColorStop(1, 'rgba(0,0,0,0.34)');
+    g.fillStyle = vig; g.fillRect(0, 0, IMG_W, IMG_H);
+
+    var ts = date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
+           + ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':' + pad(date.getSeconds());
+    g.font = 'bold 15px ui-monospace, Consolas, monospace';
+    g.textBaseline = 'alphabetic';
+    g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(12, 12, 74, 25);
+    g.fillStyle = '#ffffff'; g.fillText(CAMERA_ID, 20, 29);
+    var tw = g.measureText(ts).width;
+    g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(IMG_W - tw - 26, IMG_H - 37, tw + 14, 25);
+    g.fillStyle = '#ffffff'; g.fillText(ts, IMG_W - tw - 19, IMG_H - 20);
+
+    return c.toDataURL('image/jpeg', 0.78);
+  }
+
+  // ============================================================
+  // 2. fakeDrive — driveClient.listPhotos() の代役
+  // ============================================================
+
+  function fileNameOf(date) {
+    return CAMERA_ID + '_' + date.getFullYear() + pad(date.getMonth() + 1) + pad(date.getDate())
+         + '_' + pad(date.getHours()) + pad(date.getMinutes()) + pad(date.getSeconds()) + '.jpg';
+  }
+
+  function makePhoto(seq) {
+    var date = new Date(SERIES_START.getTime() + seq * CAPTURE_INTERVAL_MIN * 60000);
+    // 何枚かは EXIF が欠けている想定にして、フォールバック表示を確認できるようにする（Q6）
+    var hasExif = (seq % 11) !== 4;
+    return {
+      id: 'demo-' + seq,
+      seq: seq,
+      name: fileNameOf(date),
+      url: renderScene(seq, date),
+      capturedAt: date,
+      source: hasExif ? 'exif' : 'createdTime'
+    };
+  }
+
+  // ============================================================
+  // 3. 状態（App.tsx が useState で持つぶん）
+  // ============================================================
+
+  var state = {
+    signedIn: false,
+    email: 'demo.user@example.com',
+    photos: [],
+    nextSeq: 0,
+    selected: null,
+    intervalSec: DEFAULT_POLL_SEC,
+    lastFetchAt: null,
+    loading: false,
+    banner: null,
+    emptyMode: false
+  };
+  var timer = null;
+
+  // ============================================================
+  // 4. ポーリング（usePolling 相当）
+  // ============================================================
+
+  function fetchOnce() {
+    if (state.loading) return;              // 前回が終わる前に次を撃たない（04 §7）
+    state.loading = true; render();
+    setTimeout(function () {
+      state.loading = false;
+      state.lastFetchAt = new Date();
+      if (!state.emptyMode) {
+        state.photos.unshift(makePhoto(state.nextSeq++));
+        if (state.selected !== null) state.selected += 1;
+      }
+      render();
+    }, 420);
+  }
+
+  function restartTimer() {
+    if (timer) { clearInterval(timer); timer = null; }
+    if (state.signedIn) timer = setInterval(fetchOnce, state.intervalSec * 1000);
+  }
+
+  function fillInitial() {
+    state.photos = [];
+    state.nextSeq = 0;
+    for (var i = 0; i < INITIAL_COUNT; i++) state.photos.unshift(makePhoto(state.nextSeq++));
+  }
+
+  function signIn() {
+    state.signedIn = true;
+    state.banner = null;
+    state.selected = null;
+    state.emptyMode ? (state.photos = []) : fillInitial();
+    state.lastFetchAt = new Date();
+    restartTimer();
+    render();
+  }
+
+  function signOut(message) {
+    state.signedIn = false;
+    state.photos = [];
+    state.selected = null;
+    state.loading = false;
+    state.banner = message ? { kind: 'err', text: message } : null;
+    restartTimer();
+    render();
+  }
+
+  // ============================================================
+  // 5. 表示
+  // ============================================================
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch];
+    });
+  }
+  function fmtTime(d) { return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()); }
+  function fmtFull(d) {
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + fmtTime(d);
+  }
+  function fmtInterval(sec) { return sec < 60 ? sec + '秒' : (sec / 60) + '分'; }
+  function srcLabel(p) {
+    return p.source === 'exif'
+      ? { cls: '', text: '撮影時刻（EXIF）' }
+      : { cls: ' fallback', text: '⚠ EXIF なし — アップロード時刻を表示しています' };
+  }
+
+  function renderAppbar() {
+    var right = state.signedIn
+      ? '<div class="account"><span class="avatar">' + esc(state.email[0].toUpperCase()) + '</span>'
+        + esc(state.email) + '</div><button id="signout">ログアウト</button>'
+      : '<div class="account">未ログイン</div>';
+    document.getElementById('appbar').innerHTML =
+      '<div class="brand"><span class="dot' + (state.signedIn ? '' : ' off') + '"></span>定点観測ビューアー</div>'
+      + '<div class="spacer"></div>' + right;
+  }
+
+  function renderToolbar() {
+    var opts = POLL_OPTIONS.map(function (s) {
+      return '<option value="' + s + '"' + (s === state.intervalSec ? ' selected' : '') + '>'
+           + fmtInterval(s) + '</option>';
+    }).join('');
+    return '<div class="toolbar">'
+      + '<label class="field">更新間隔 <select id="interval">' + opts + '</select></label>'
+      + '<button class="primary" id="refresh"' + (state.loading ? ' disabled' : '') + '>今すぐ更新</button>'
+      + '<span class="stamp">'
+      +   (state.loading ? '<span class="spin"></span>取得中…'
+                         : '最終取得 ' + (state.lastFetchAt ? fmtTime(state.lastFetchAt) : '—'))
+      + '</span>'
+      + '<span class="spacer"></span>'
+      + '<span class="stamp">' + state.photos.length + ' 枚</span>'
+      + '</div>';
+  }
+
+  function renderBanner() {
+    if (!state.banner) return '';
+    return '<div class="banner ' + (state.banner.kind === 'err' ? 'err' : 'warn') + '">'
+         + esc(state.banner.text) + '</div>';
+  }
+
+  function renderLatest() {
+    var p = state.photos[0], s = srcLabel(p);
+    return '<section class="latest">'
+      + '<img src="' + p.url + '" alt="最新の撮影画像">'
+      + '<div class="meta">'
+      +   '<span class="cap">' + fmtFull(p.capturedAt) + '</span>'
+      +   '<span class="capsrc' + s.cls + '">' + s.text + '</span>'
+      +   '<span class="fname">' + esc(p.name) + '</span>'
+      + '</div></section>';
+  }
+
+  function renderGrid() {
+    var cells = state.photos.map(function (p, i) {
+      return '<button class="thumb' + (i === 0 ? ' newest' : '') + '" data-i="' + i + '">'
+           + '<img src="' + p.url + '" alt="' + esc(p.name) + '" loading="lazy">'
+           + (i === 0 ? '<span class="badge">最新</span>' : '')
+           + '<span class="t">' + fmtFull(p.capturedAt) + '</span></button>';
+    }).join('');
+    return '<h2 class="sec">撮影一覧 <span class="count">（新しい順・クリックで拡大）</span></h2>'
+         + '<div class="grid">' + cells + '</div>';
+  }
+
+  function renderEmpty() {
+    return '<div class="empty"><h3>まだ写真がありません</h3>'
+      + '<p>Android 端末が撮影してアップロードすると、ここに表示されます。<br>'
+      + '端末側で撮影が開始されているかを確認してください。</p></div>';
+  }
+
+  function renderGate() {
+    return '<div class="gate">'
+      + '<h1>定点観測ビューアー</h1>'
+      + '<p>Android 端末が Google Drive のアプリ専用領域へアップロードした画像を表示します。'
+      +   '撮影に使ったものと同じ Google アカウントでログインしてください。</p>'
+      + '<button class="primary" id="signin">'
+      +   '<svg class="gicon" viewBox="0 0 24 24" aria-hidden="true">'
+      +     '<path fill="currentColor" d="M21.6 12.2c0-.7-.1-1.3-.2-1.9H12v3.6h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.2z"/>'
+      +     '<path fill="currentColor" d="M12 22c2.7 0 4.9-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.7-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z"/>'
+      +     '<path fill="currentColor" d="M6.4 14c-.2-.6-.3-1.3-.3-2s.1-1.4.3-2V7.4H3.1a10 10 0 0 0 0 9.2L6.4 14z"/>'
+      +     '<path fill="currentColor" d="M12 5.9c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 3.1 7.4L6.4 10c.8-2.4 3-4.1 5.6-4.1z"/>'
+      +   '</svg>Google でログイン（デモ）'
+      + '</button></div>';
+  }
+
+  function renderDevbar() {
+    return '<div class="devbar">'
+      + '<h3>デモ操作（本番の SPA には存在しません）</h3>'
+      + '<div class="row">'
+      +   '<button data-dev="add">新しい写真が届いた</button>'
+      +   '<button data-dev="empty">' + (state.emptyMode ? '写真ありに戻す' : '写真 0 件にする') + '</button>'
+      +   '<button data-dev="401">401（トークン失効）</button>'
+      +   '<button data-dev="429">429（レート制限）</button>'
+      +   '<button data-dev="404">404（1 枚だけ取得失敗）</button>'
+      +   '<button data-dev="reset">リセット</button>'
+      + '</div>'
+      + '<p>docs/04-frontend.md 8 節「エラーハンドリング」の挙動を、その場で見せるためのボタンです。</p>'
+      + '</div>';
+  }
+
+  function renderViewer() {
+    var host = document.getElementById('viewer');
+    if (state.selected === null || !state.photos[state.selected]) { host.innerHTML = ''; return; }
+    var i = state.selected, p = state.photos[i], s = srcLabel(p);
+    host.innerHTML = '<div class="viewer">'
+      + '<div class="vtop">'
+      +   '<span class="vtitle">' + fmtFull(p.capturedAt) + '</span>'
+      +   '<span class="capsrc' + s.cls + '">' + s.text + '</span>'
+      +   '<span class="fname">' + esc(p.name) + '</span>'
+      +   '<span class="spacer"></span>'
+      +   '<button data-v="close">閉じる（Esc）</button>'
+      + '</div>'
+      + '<div class="vbody"><img src="' + p.url + '" alt="' + esc(p.name) + '"></div>'
+      + '<div class="vbot">'
+      +   '<button data-v="prev"' + (i >= state.photos.length - 1 ? ' disabled' : '') + '>← 古い</button>'
+      +   '<span>' + (i + 1) + ' / ' + state.photos.length + '</span>'
+      +   '<button data-v="next"' + (i <= 0 ? ' disabled' : '') + '>新しい →</button>'
+      + '</div></div>';
+  }
+
+  function render() {
+    renderAppbar();
+    var main = document.getElementById('main');
+    if (!state.signedIn) {
+      main.innerHTML = renderBanner() + renderGate() + renderDevbar();
+    } else {
+      main.innerHTML = renderBanner() + renderToolbar()
+        + (state.photos.length ? renderLatest() + renderGrid() : renderEmpty())
+        + renderDevbar();
+    }
+    renderViewer();
+  }
+
+  // ============================================================
+  // 6. 入力
+  // ============================================================
+
+  document.addEventListener('click', function (e) {
+    var t = e.target && e.target.closest ? e.target.closest('button') : null;
+    if (!t) return;
+
+    if (t.id === 'signin') return signIn();
+    if (t.id === 'signout') return signOut(null);
+    if (t.id === 'refresh') return fetchOnce();
+
+    if (t.dataset.i !== undefined) { state.selected = Number(t.dataset.i); return renderViewer(); }
+    if (t.dataset.v === 'close') { state.selected = null; return renderViewer(); }
+    if (t.dataset.v === 'prev') { state.selected = Math.min(state.photos.length - 1, state.selected + 1); return renderViewer(); }
+    if (t.dataset.v === 'next') { state.selected = Math.max(0, state.selected - 1); return renderViewer(); }
+
+    switch (t.dataset.dev) {
+      case 'add':
+        if (state.signedIn) fetchOnce();
+        return;
+
+      case 'empty':
+        state.emptyMode = !state.emptyMode;
+        state.selected = null;
+        if (state.emptyMode) { state.photos = []; } else { fillInitial(); }
+        return render();
+
+      case '401':
+        // 401 / 403（スコープ不足）: ポーリングを止め、再ログイン導線へ戻す。トークンは更新しない
+        return signOut('ログインの有効期限が切れました。もう一度ログインしてください。');
+
+      case '429': {
+        // 429 / 403（レート制限）: 間隔を延ばしてバナーを出す。ポーリングは止めない
+        var idx = POLL_OPTIONS.indexOf(state.intervalSec);
+        state.intervalSec = POLL_OPTIONS[Math.min(POLL_OPTIONS.length - 1, idx + 1)];
+        state.banner = { kind: 'warn', text: 'Drive API のレート制限に達しました。更新間隔を '
+          + fmtInterval(state.intervalSec) + ' へ延ばして継続します。' };
+        restartTimer();
+        return render();
+      }
+
+      case '404':
+        // 個別ファイルの 404: その 1 枚だけ一覧から外す。画面全体は落とさない
+        if (state.photos.length > 1) {
+          var gone = state.photos.splice(1, 1)[0];
+          state.selected = null;
+          state.banner = { kind: 'warn', text: '1 枚の画像を取得できなかったため一覧から除外しました（'
+            + gone.name + '）。表示は継続しています。' };
+        }
+        return render();
+
+      case 'reset':
+        state.emptyMode = false;
+        state.intervalSec = DEFAULT_POLL_SEC;
+        state.banner = null;
+        state.selected = null;
+        if (state.signedIn) { signIn(); } else { restartTimer(); render(); }
+        return;
+    }
+  });
+
+  document.addEventListener('change', function (e) {
+    if (e.target.id === 'interval') {
+      state.intervalSec = Number(e.target.value);
+      restartTimer();
+      render();
+    }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (state.selected === null) return;
+    if (e.key === 'Escape') { state.selected = null; renderViewer(); }
+    if (e.key === 'ArrowRight') { state.selected = Math.max(0, state.selected - 1); renderViewer(); }
+    if (e.key === 'ArrowLeft') { state.selected = Math.min(state.photos.length - 1, state.selected + 1); renderViewer(); }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

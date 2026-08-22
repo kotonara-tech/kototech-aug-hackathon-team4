@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-demo/
+coverage/
+
+# 環境変数（クライアント ID）。絶対にコミットしないこと
+.env.local
+.env.*.local
+
+# 旧 FastAPI 実装の残骸。legacy/web-app/ に移設済み
+.venv/
+__pycache__/
+.pytest_cache/

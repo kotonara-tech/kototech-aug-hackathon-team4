@@ -1,0 +1,33 @@
+{
+  "name": "teiten-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "定点観測ビューアー — Google Drive AppData 領域を読むだけの静的 SPA（サーバーなし）",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build:demo": "vite build --config vite.demo.config.ts && node scripts/inline-demo.mjs",
+    "preview:demo": "vite preview --outDir dist-demo"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.5.0",
+    "@testing-library/react": "^16.0.1",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/google.accounts": "^0.0.15",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4"
+  }
+}
