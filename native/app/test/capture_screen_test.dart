@@ -4,6 +4,7 @@ import 'package:farmcamera/auth_gateway.dart';
 import 'package:farmcamera/main.dart';
 import 'package:farmcamera/photo_source.dart';
 import 'package:farmcamera/photo_record.dart';
+import 'package:farmcamera/photo_storage.dart';
 import 'package:farmcamera/photo_uploader.dart';
 import 'package:farmcamera/wake_lock.dart';
 import 'package:flutter/material.dart';
@@ -135,6 +136,8 @@ void main() {
         uploader: uploader,
         wakeLock: wakeLock,
         recordStore: recordStore,
+        // 実体ファイルの削除は #32 のユニットテストで見る。ここは画面の検証に絞る。
+        fileStore: const NoopPhotoFileStore(),
       ),
     );
     await tester.pumpAndSettle();
