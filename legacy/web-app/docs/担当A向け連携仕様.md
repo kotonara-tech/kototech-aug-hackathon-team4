@@ -1,3 +1,7 @@
+> **廃止。この文書は旧方針（マイドライブ直下 `FarmCameraPOC` + `drive.file` / `drive.readonly`）で
+> 書かれており、現在の設計とは一致しません。設計正本は `docs/` です。**
+> 経緯は [legacy/README.md](../../README.md) / [Q2](../../../docs/00-openquestion.md) を参照。
+
 # 担当A（Android）↔ 担当B（Web）連携仕様
 
 POC 結合時に「1枚も表示されない」を避けるための取り決めです。

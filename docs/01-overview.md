@@ -293,11 +293,11 @@ lint は**プロジェクト作成時に整備します。** 後回しにする�
 
 | 旧 | 新 | 備考 |
 |---|---|---|
-| `native/app/` Flutter 3.47（55 テスト、APK ビルド済み） | Kotlin へ全面書き直し | 移植できるのはファイル名規約と撮影セッションの状態遷移の考え方のみ |
-| `web/app/` FastAPI + Jinja2 | React SPA へ全面書き直し | サーバーを持たない方針のため |
+| `legacy/native-app/` Flutter 3.47 | Kotlin へ全面書き直し（`native/android/`） | 移植できるのはファイル名規約と撮影セッションの状態遷移の考え方のみ |
+| `legacy/web-app/` FastAPI + Jinja2 | React SPA へ全面書き直し | サーバーを持たない方針のため |
 | マイドライブ `FarmCameraPOC` フォルダ | `appDataFolder` | スコープも `drive.file`/`drive.readonly` → `drive.appdata` |
 
-削除のタイミングは未決（→ [Q2](00-openquestion.md#-q2-既存実装と既存ドキュメントをどう処理するか)）。
+旧実装は `legacy/` へ退避済み（→ [Q2](00-openquestion.md) は Close）。
 
 ---
 

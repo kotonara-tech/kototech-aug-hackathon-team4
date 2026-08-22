@@ -2,8 +2,9 @@ import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+
+import 'photo_storage.dart';
 
 /// 撮影ハードウェアの抽象。
 ///
@@ -20,7 +21,7 @@ abstract class PhotoSource {
   /// 直近の初期化エラー。正常時は null。
   String? get errorMessage;
 
-  /// [fileName] の名前で端末内へ保存し、そのファイルを返す。
+  /// [fileName] の名前でアプリ専用領域へ保存し、そのファイルを返す。
   Future<File> capture(String fileName);
 
   /// プレビュー表示。準備できていない場合の表示も実装側が返す。
@@ -73,8 +74,9 @@ class CameraPhotoSource implements PhotoSource {
       throw StateError('カメラが初期化されていません。');
     }
     final picture = await controller.takePicture();
-    final tempDir = await getTemporaryDirectory();
-    return File(picture.path).copy('${tempDir.path}/$fileName');
+    // 一時領域ではなくアプリ専用領域へ置く。消す時期はアプリが決める（#32）。
+    final dir = await resolvePhotoDirectory();
+    return File(picture.path).copy('${dir.path}/$fileName');
   }
 
   @override

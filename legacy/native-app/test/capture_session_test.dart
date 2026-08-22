@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:farmcamera/capture_session.dart';
 import 'package:farmcamera/photo_record.dart';
+import 'package:farmcamera/photo_storage.dart';
 import 'package:farmcamera/photo_uploader.dart';
 import 'package:farmcamera/wake_lock.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -59,6 +60,21 @@ class _ThrowingRecordStore implements PhotoRecordStore {
   @override
   Future<void> save(List<PhotoRecord> records) async =>
       throw Exception('disk full');
+}
+
+/// 削除指示を記録するだけのフェイク。実体は消さない。
+class _RecordingPhotoFileStore implements PhotoFileStore {
+  final List<Set<String>> calls = <Set<String>>[];
+
+  @override
+  Future<void> retainOnly(Set<String> keep) async => calls.add(keep);
+}
+
+/// 削除に必ず失敗するフェイク。権限不足や読み取り専用領域を模す。
+class _ThrowingPhotoFileStore implements PhotoFileStore {
+  @override
+  Future<void> retainOnly(Set<String> keep) async =>
+      throw Exception('permission denied');
 }
 
 class _FakeWakeLock implements WakeLock {
@@ -632,5 +648,111 @@ void main() {
     expect(session.capturedCount, 1);
     expect(session.sentCount, 1, reason: '履歴の失敗で送信まで止めない');
     expect(session.lastError, contains('撮影履歴'));
+  });
+
+  group('端末に残す写真の上限（#32）', () {
+    /// 実体ファイルまで見たいテスト用。撮影先と削除対象を同じ場所に揃える。
+    CaptureSession buildSession({
+      required PhotoFileStore fileStore,
+      int maxRecords = 100,
+    }) {
+      final s = CaptureSession(
+        capturer: capturer.call,
+        uploader: uploader,
+        recordStore: recordStore,
+        fileStore: fileStore,
+        maxRecords: maxRecords,
+        now: () => now,
+      );
+      addTearDown(s.dispose);
+      s.isSignedIn = true;
+      s.start();
+      return s;
+    }
+
+    bool existsOnDisk(String fileName) =>
+        File('${tempDir.path}/$fileName').existsSync();
+
+    test('撮影のたびに、履歴に残っているぶんだけを残すよう指示する', () async {
+      final store = _RecordingPhotoFileStore();
+      final s = buildSession(fileStore: store);
+
+      await s.captureOnce();
+
+      expect(store.calls.last, <String>{'CAM001_20260821_140509.jpg'});
+    });
+
+    test('上限を超えて古くなった送信済みの写真は実体も消える', () async {
+      // 長期保管は Web アプリ側の責務。端末は直近ぶんだけを持つ（AGENTS.md 5.4）。
+      final s = buildSession(
+        fileStore: DirectoryPhotoFileStore(() async => tempDir),
+        maxRecords: 2,
+      );
+
+      await s.captureOnce();
+      now = DateTime(2026, 8, 21, 14, 6, 9);
+      await s.captureOnce();
+      now = DateTime(2026, 8, 21, 14, 7, 9);
+      await s.captureOnce();
+
+      expect(existsOnDisk('CAM001_20260821_140509.jpg'), isFalse,
+          reason: '履歴から落ちた写真の実体を残すと端末を圧迫し続ける');
+      expect(existsOnDisk('CAM001_20260821_140609.jpg'), isTrue);
+      expect(existsOnDisk('CAM001_20260821_140709.jpg'), isTrue);
+    });
+
+    test('送信に失敗した写真は上限を超えても実体を消さない', () async {
+      // 履歴が「送信失敗」を出しているのに実体が無い状態を作らない。
+      final s = buildSession(
+        fileStore: DirectoryPhotoFileStore(() async => tempDir),
+        maxRecords: 1,
+      );
+
+      uploader.shouldFail = true;
+      await s.captureOnce();
+      uploader.shouldFail = false;
+      now = DateTime(2026, 8, 21, 14, 6, 9);
+      await s.captureOnce();
+      now = DateTime(2026, 8, 21, 14, 7, 9);
+      await s.captureOnce();
+
+      expect(existsOnDisk('CAM001_20260821_140509.jpg'), isTrue,
+          reason: '送信できていない写真こそ残す（risk-assessment.md 追加合意2）');
+      expect(existsOnDisk('CAM001_20260821_140609.jpg'), isFalse);
+    });
+
+    test('履歴に無い写真（前回の残骸）も掃除される', () async {
+      File('${tempDir.path}/CAM001_20260101_000000.jpg')
+          .writeAsBytesSync(<int>[0xFF, 0xD8, 0xFF]);
+      final s = buildSession(
+        fileStore: DirectoryPhotoFileStore(() async => tempDir),
+      );
+
+      await s.captureOnce();
+
+      expect(existsOnDisk('CAM001_20260101_000000.jpg'), isFalse);
+      expect(existsOnDisk('CAM001_20260821_140509.jpg'), isTrue);
+    });
+
+    test('削除に失敗しても撮影・送信は続き、エラーはステータスに残る', () async {
+      final s = buildSession(fileStore: _ThrowingPhotoFileStore());
+
+      await s.captureOnce();
+
+      expect(s.capturedCount, 1);
+      expect(s.sentCount, 1, reason: '削除の失敗で送信まで止めない');
+      expect(s.lastError, contains('古い写真'));
+    });
+
+    test('既定では何も消さない（明示的に渡したときだけ削除する）', () async {
+      File('${tempDir.path}/CAM001_20260101_000000.jpg')
+          .writeAsBytesSync(<int>[0xFF, 0xD8, 0xFF]);
+      session.isSignedIn = true;
+      session.start();
+
+      await session.captureOnce();
+
+      expect(existsOnDisk('CAM001_20260101_000000.jpg'), isTrue);
+    });
   });
 }
