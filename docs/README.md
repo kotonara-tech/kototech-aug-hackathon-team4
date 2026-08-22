@@ -12,6 +12,7 @@
 | 02 | [02-google-drive.md](02-google-drive.md) | Drive AppData 領域の設計。**Native と Web が共通で守る契約層** |
 | 03 | [03-native.md](03-native.md) | Android（Kotlin）の設計 |
 | 04 | [04-frontend.md](04-frontend.md) | Web（React + Vite SPA）の設計 |
+| 05 | [05-implementation-plan.md](05-implementation-plan.md) | **実装計画（Native）。どの順で作るか・人間側のブロッカー** |
 
 **`02` は Native と Web の両方に効く契約です。**
 `03` または `04` だけを読んで実装しないでください。0 枚問題の原因はほぼ全部 `02` にあります。
@@ -24,7 +25,7 @@
 
 ## 更新のルール
 
-- `01`〜`04` には**決まったことだけ**を書きます
+- `01`〜`04` には**決まったことだけ**を書きます。`05` は着手順序であり、設計そのものは変えません
 - 未決・仮置き・未検証は `00-openquestion.md` に集約します
 - `00` の項目が決まったら、本文を該当文書へ移し、`00` からは削除します
 

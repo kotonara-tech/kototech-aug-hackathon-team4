@@ -13,6 +13,7 @@
 | 02 | [docs/02-google-drive.md](docs/02-google-drive.md) | Drive AppData 領域。**Native と Web が共通で守る契約層** |
 | 03 | [docs/03-native.md](docs/03-native.md) | Android（Kotlin）の設計 |
 | 04 | [docs/04-frontend.md](docs/04-frontend.md) | Web（React + Vite SPA）の設計 |
+| 05 | [docs/05-implementation-plan.md](docs/05-implementation-plan.md) | **Native の実装計画。着手順序と人間側のブロッカー** |
 
 **`02` は両側に効く契約です。`03` や `04` だけを読んで実装しないでください。**
 「Web に 1 枚も表示されない」の原因は、ほぼ全部 `02` にあります。
