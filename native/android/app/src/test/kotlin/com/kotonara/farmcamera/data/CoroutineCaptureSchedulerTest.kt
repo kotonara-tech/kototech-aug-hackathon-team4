@@ -96,6 +96,19 @@ class CoroutineCaptureSchedulerTest {
     }
 
     @Test
+    fun `最初の発火前に停止するとコールバックを呼ばない`() = runTest {
+        val scheduler = CoroutineCaptureScheduler(backgroundScope)
+        var ticks = 0
+
+        scheduler.start(5.minutes) { ticks++ }
+        scheduler.stop()
+        runCurrent()
+
+        assertEquals(0, ticks)
+        assertFalse(scheduler.isActive)
+    }
+
+    @Test
     fun `start すると動作中になる`() = runTest {
         val scheduler = CoroutineCaptureScheduler(backgroundScope)
 

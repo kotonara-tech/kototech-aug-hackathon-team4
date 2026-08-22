@@ -1,5 +1,6 @@
 # Gradle
 .gradle/
+.kotlin/
 build/
 
 # ビルド機ごとに異なるため共有しない（sdk.dir を含む）
