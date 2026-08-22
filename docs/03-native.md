@@ -28,9 +28,9 @@ Drive とのやりとりの契約は [02-google-drive.md](02-google-drive.md) �
 必要です。Flutter でこれをやると、結局 Kotlin 側にプラグインを書くことになります。
 **最初から Kotlin にします。**
 
-旧 Flutter 実装（`native/app/`、55 テスト、APK ビルド済み）から移植できるのは、
-ファイル名規約と撮影セッションの状態遷移の考え方だけです。
-削除タイミングは未決（→ [Q2](00-openquestion.md)）。
+旧 Flutter 実装（`legacy/native-app/`）から移植できるのは、ファイル名規約と
+撮影セッションの状態遷移の考え方だけです。移植する具体的な中身は
+[05 §3](05-implementation-plan.md) の M1 に列挙してあります。
 
 ---
 
