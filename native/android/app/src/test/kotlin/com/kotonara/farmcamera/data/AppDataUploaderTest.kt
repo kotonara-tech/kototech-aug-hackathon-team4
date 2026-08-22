@@ -1,6 +1,10 @@
 package com.kotonara.farmcamera.data
 
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -8,6 +12,7 @@ import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -79,6 +84,39 @@ class AppDataUploaderTest {
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull()!!.message!!.contains("authorization is required"))
         assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `アップロードは呼び出し元のスレッドをブロックしない`() = runBlocking {
+        // 実機で NetworkOnMainThreadException（メッセージ null）が飛んだ回帰（#51）。
+        // OkHttp の execute() が呼び出し元のディスパッチャ上でそのまま動くと、
+        // 呼び出し元スレッドと通信スレッドが一致してしまう。
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"id":"file-123"}"""))
+        val networkThreadName = AtomicReference<String>()
+        val recordingClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                networkThreadName.set(Thread.currentThread().name)
+                chain.proceed(chain.request())
+            }
+            .build()
+        val uploader = AppDataUploader(
+            client = recordingClient,
+            accessToken = { Result.success("access-token") },
+            uploadUrl = server.url("/upload/drive/v3/files?uploadType=multipart")
+        )
+
+        val callerThreadName = AtomicReference<String>()
+        val callerExecutor = Executors.newSingleThreadExecutor { runnable -> Thread(runnable, "caller-thread") }
+        try {
+            withContext(callerExecutor.asCoroutineDispatcher()) {
+                callerThreadName.set(Thread.currentThread().name)
+                uploader.upload("CAM001_20260822_063000.jpg", byteArrayOf()).getOrThrow()
+            }
+        } finally {
+            callerExecutor.shutdown()
+        }
+
+        assertNotEquals(callerThreadName.get(), networkThreadName.get())
     }
 
     @Test
