@@ -21,23 +21,26 @@
       --shadow:0 1px 2px rgba(0,0,0,.5),0 8px 24px rgba(0,0,0,.45);
     }
   }
-  :root[data-theme="dark"]{
-      --bg:#0f1216; --panel:#171b21; --line:#2a313a; --fg:#e6e9ee; --muted:#9aa6b2;
-      --accent:#4c8dff; --accent-fg:#0b0f14; --warn:#f0c674; --warn-bg:#332a12; --warn-line:#5c4a1c;
-      --err:#ffb4ab; --err-bg:#3a1d1a; --err-line:#6b2f28;
-      --demo-bg:#1b1f3a; --demo-line:#333b6b; --demo-fg:#c7d2fe;
-      --shadow:0 1px 2px rgba(0,0,0,.5),0 8px 24px rgba(0,0,0,.45);
-  }
+  
+  /* ======== 画面全体をウィンドウ高さに固定する修正 ======== */
   *{box-sizing:border-box}
-  html,body{margin:0;padding:0}
+  html,body{
+    margin:0; padding:0; 
+    height: 100%; /* ウィンドウ高さにフィット */
+    overflow: hidden; /* ページ全体のスクロールを無効化 */
+  }
   body{
     background:var(--bg); color:var(--fg);
     font-family:"Segoe UI","Hiragino Kaku Gothic ProN","Noto Sans JP",Meiryo,system-ui,sans-serif;
     font-size:15px; line-height:1.6; -webkit-font-smoothing:antialiased;
+    display: flex;
+    flex-direction: column; /* 縦並びのFlexbox */
   }
-  .wrap{max-width:1100px;margin:0 auto;padding:0 16px 64px}
 
-  header.appbar{position:sticky;top:0;z-index:20;background:var(--panel);border-bottom:1px solid var(--line)}
+  /* ヘッダーやバナーなどは高さを可変に（縮まないように） */
+  .demoflag, header.appbar { flex-shrink: 0; }
+
+  header.appbar{background:var(--panel);border-bottom:1px solid var(--line)}
   .appbar-in{max-width:1100px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
   .brand{font-weight:700;font-size:17px;letter-spacing:.02em;display:flex;align-items:center;gap:8px}
   .brand .dot{width:9px;height:9px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.18)}
@@ -49,7 +52,31 @@
 
   .demoflag{background:var(--demo-bg);border-bottom:1px solid var(--demo-line);color:var(--demo-fg);font-size:13px}
   .demoflag .in{max-width:1100px;margin:0 auto;padding:7px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .banner{border-radius:10px;padding:10px 14px;margin:14px 0;font-size:14px}
+
+  /* ======== メインコンテンツ領域（残りの高さを埋めて、内部をスクロール） ======== */
+  .wrap {
+    flex: 1; /* 残りの高さをすべて埋める */
+    display: flex;
+    flex-direction: column;
+    max-width: 1100px;
+    width: 100%;
+    margin: 0 auto;
+    overflow: hidden; /* コンテナ自体はスクロールしない */
+  }
+
+  main#main {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 0 16px 16px; /* 下部の余白を調整 */
+  }
+
+  /* 上部の固定要素（バナー、ツールバー、最新画像） */
+  .fixed-top-section {
+    flex-shrink: 0; /* 縮まない */
+  }
+
+  .banner{border-radius:10px;padding:10px 14px;margin:14px 0 0;font-size:14px}
   .banner.warn{background:var(--warn-bg);border:1px solid var(--warn-line);color:var(--warn)}
   .banner.err{background:var(--err-bg);border:1px solid var(--err-line);color:var(--err)}
 
@@ -70,14 +97,30 @@
   @keyframes sp{to{transform:rotate(360deg)}}
 
   .latest{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
-  .latest img{display:block;width:100%;height:auto;background:#000}
+  /* 最新画像の高さを少し抑えて、一覧の表示領域を確保 */
+  .latest img{display:block;width:100%;max-height:35vh;object-fit:contain;background:#000}
   .latest .meta{padding:12px 16px;display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;border-top:1px solid var(--line)}
   .cap{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
   .capsrc{font-size:12px;color:var(--muted)}
   .capsrc.fallback{color:var(--warn);font-weight:600}
   .fname{margin-left:auto;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--muted)}
 
-  h2.sec{font-size:14px;color:var(--muted);font-weight:600;margin:26px 0 10px;letter-spacing:.04em}
+  /* ======== サムネイル一覧エリア（ここだけスクロールさせる） ======== */
+  .scrollable-grid-section {
+    flex: 1; /* 残りの高さを埋める */
+    overflow-y: auto; /* 縦スクロールを許可 */
+    padding-right: 8px; /* スクロールバー用の余白 */
+    margin-top: 10px;
+    padding-bottom: 20px;
+  }
+  
+  /* スクロールバーの見た目を少し綺麗にする（WebKit系） */
+  .scrollable-grid-section::-webkit-scrollbar { width: 8px; }
+  .scrollable-grid-section::-webkit-scrollbar-track { background: transparent; }
+  .scrollable-grid-section::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+  .scrollable-grid-section::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  h2.sec{font-size:14px;color:var(--muted);font-weight:600;margin:16px 0 10px;letter-spacing:.04em; position:sticky; top:0; background:var(--bg); z-index:10; padding:4px 0;}
   .count{font-weight:400}
 
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
@@ -91,7 +134,7 @@
     font-size:10.5px;font-weight:700;padding:2px 6px;border-radius:999px;line-height:1.4}
 
   .empty,.gate{background:var(--panel);border:1px solid var(--line);border-radius:14px;
-    padding:44px 24px;text-align:center;box-shadow:var(--shadow)}
+    padding:44px 24px;text-align:center;box-shadow:var(--shadow); margin-top:16px;}
   .gate{margin-top:64px}
   .gate h1{font-size:22px;margin:0 0 6px}
   .gate p{color:var(--muted);margin:0 auto 22px;max-width:46ch;font-size:14px}
@@ -109,8 +152,8 @@
   .viewer button{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.22);color:#e6e9ee}
   .viewer .vtitle{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}
 
-  .devbar{margin-top:34px;border:1px dashed var(--demo-line);background:var(--demo-bg);color:var(--demo-fg);
-    border-radius:12px;padding:12px 14px}
+  .devbar{margin-top:16px;border:1px dashed var(--demo-line);background:var(--demo-bg);color:var(--demo-fg);
+    border-radius:12px;padding:12px 14px; flex-shrink:0;}
   .devbar h3{margin:0 0 8px;font-size:12.5px;letter-spacing:.06em;font-weight:700}
   .devbar .row{display:flex;gap:8px;flex-wrap:wrap}
   .devbar button{background:var(--panel);border-color:var(--demo-line);font-size:13px;padding:5px 11px}
@@ -137,24 +180,13 @@
 (function () {
   'use strict';
 
-  /* ============================================================
-     定点観測ビューアー デモ画面
-     docs/04-frontend.md 9 節の画面構成を、ビルド不要で再現したもの。
-     Drive API は呼ばない。画像は canvas で合成する。
-     ネットワークにも Node.js にも依存しない。
-     ============================================================ */
-
-  var CAPTURE_INTERVAL_MIN = 5;             // Q3 暫定
-  var POLL_OPTIONS = [10, 30, 60, 300];     // Q4 暫定
-  var DEFAULT_POLL_SEC = 30;                // Q4 暫定
-  var CAMERA_ID = 'CAM001';                 // 02-google-drive.md 4.2（1端末契約の固定値）
+  var CAPTURE_INTERVAL_MIN = 5;
+  var POLL_OPTIONS = [10, 30, 60, 300];
+  var DEFAULT_POLL_SEC = 30;
+  var CAMERA_ID = 'CAM001';
   var INITIAL_COUNT = 36;
-  var SERIES_START = new Date(2026, 7, 22, 6, 0, 0);   // 2026-08-22 06:00
+  var SERIES_START = new Date(2026, 7, 22, 6, 0, 0);
   var IMG_W = 800, IMG_H = 450;
-
-  // ============================================================
-  // 1. 合成画像（Drive から取得する JPEG の代役）
-  // ============================================================
 
   function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
@@ -167,7 +199,6 @@
                   + Math.round(A[1] + (B[1] - A[1]) * t) + ','
                   + Math.round(A[2] + (B[2] - A[2]) * t) + ')';
   }
-  // 定点である以上、株の位置は毎回同じでなければならない。seq に依存しない疑似乱数を使う。
   function noise(seed) {
     var x = Math.sin(seed * 12.9898) * 43758.5453;
     return x - Math.floor(x);
@@ -197,7 +228,7 @@
     c.width = IMG_W; c.height = IMG_H;
     var g = c.getContext('2d');
     var hours = date.getHours() + date.getMinutes() / 60;
-    var day = clamp((hours - 5) / 6, 0, 1);            // 5時=夜明け 〜 11時=朝
+    var day = clamp((hours - 5) / 6, 0, 1);
     var horizon = IMG_H * 0.62;
 
     var sky = g.createLinearGradient(0, 0, 0, horizon);
@@ -279,10 +310,6 @@
     return c.toDataURL('image/jpeg', 0.78);
   }
 
-  // ============================================================
-  // 2. fakeDrive — driveClient.listPhotos() の代役
-  // ============================================================
-
   function fileNameOf(date) {
     return CAMERA_ID + '_' + date.getFullYear() + pad(date.getMonth() + 1) + pad(date.getDate())
          + '_' + pad(date.getHours()) + pad(date.getMinutes()) + pad(date.getSeconds()) + '.jpg';
@@ -290,7 +317,6 @@
 
   function makePhoto(seq) {
     var date = new Date(SERIES_START.getTime() + seq * CAPTURE_INTERVAL_MIN * 60000);
-    // 何枚かは EXIF が欠けている想定にして、フォールバック表示を確認できるようにする（Q6）
     var hasExif = (seq % 11) !== 4;
     return {
       id: 'demo-' + seq,
@@ -301,10 +327,6 @@
       source: hasExif ? 'exif' : 'createdTime'
     };
   }
-
-  // ============================================================
-  // 3. 状態（App.tsx が useState で持つぶん）
-  // ============================================================
 
   var state = {
     signedIn: false,
@@ -320,12 +342,8 @@
   };
   var timer = null;
 
-  // ============================================================
-  // 4. ポーリング（usePolling 相当）
-  // ============================================================
-
   function fetchOnce() {
-    if (state.loading) return;              // 前回が終わる前に次を撃たない（04 §7）
+    if (state.loading) return;
     state.loading = true; render();
     setTimeout(function () {
       state.loading = false;
@@ -368,10 +386,6 @@
     restartTimer();
     render();
   }
-
-  // ============================================================
-  // 5. 表示
-  // ============================================================
 
   function esc(s) {
     return String(s).replace(/[&<>"]/g, function (ch) {
@@ -422,36 +436,44 @@
          + esc(state.banner.text) + '</div>';
   }
 
-  function renderLatest() {
+  // 構造を変更：固定部分（上部）とスクロール部分（下部）を分ける関数群
+  function renderFixedTop() {
+    if (state.photos.length === 0) return '';
     var p = state.photos[0], s = srcLabel(p);
-    return '<section class="latest">'
+    return '<div class="fixed-top-section">'
+      + renderBanner()
+      + renderToolbar()
+      + '<section class="latest">'
       + '<img src="' + p.url + '" alt="最新の撮影画像">'
       + '<div class="meta">'
       +   '<span class="cap">' + fmtFull(p.capturedAt) + '</span>'
       +   '<span class="capsrc' + s.cls + '">' + s.text + '</span>'
       +   '<span class="fname">' + esc(p.name) + '</span>'
-      + '</div></section>';
+      + '</div></section></div>';
   }
 
-  function renderGrid() {
+  function renderScrollableGrid() {
+    if (state.photos.length === 0) return '';
     var cells = state.photos.map(function (p, i) {
       return '<button class="thumb' + (i === 0 ? ' newest' : '') + '" data-i="' + i + '">'
            + '<img src="' + p.url + '" alt="' + esc(p.name) + '" loading="lazy">'
            + (i === 0 ? '<span class="badge">最新</span>' : '')
            + '<span class="t">' + fmtFull(p.capturedAt) + '</span></button>';
     }).join('');
-    return '<h2 class="sec">撮影一覧 <span class="count">（新しい順・クリックで拡大）</span></h2>'
-         + '<div class="grid">' + cells + '</div>';
+    return '<div class="scrollable-grid-section">'
+         + '<h2 class="sec">撮影一覧 <span class="count">（新しい順・クリックで拡大）</span></h2>'
+         + '<div class="grid">' + cells + '</div>'
+         + '</div>';
   }
 
   function renderEmpty() {
-    return '<div class="empty"><h3>まだ写真がありません</h3>'
+    return renderBanner() + renderToolbar() + '<div class="empty"><h3>まだ写真がありません</h3>'
       + '<p>Android 端末が撮影してアップロードすると、ここに表示されます。<br>'
       + '端末側で撮影が開始されているかを確認してください。</p></div>';
   }
 
   function renderGate() {
-    return '<div class="gate">'
+    return renderBanner() + '<div class="gate">'
       + '<h1>定点観測ビューアー</h1>'
       + '<p>Android 端末が Google Drive のアプリ専用領域へアップロードした画像を表示します。'
       +   '撮影に使ったものと同じ Google アカウントでログインしてください。</p>'
@@ -504,18 +526,16 @@
     renderAppbar();
     var main = document.getElementById('main');
     if (!state.signedIn) {
-      main.innerHTML = renderBanner() + renderGate() + renderDevbar();
+      main.innerHTML = renderGate() + renderDevbar();
     } else {
-      main.innerHTML = renderBanner() + renderToolbar()
-        + (state.photos.length ? renderLatest() + renderGrid() : renderEmpty())
-        + renderDevbar();
+      if (state.photos.length > 0) {
+        main.innerHTML = renderFixedTop() + renderScrollableGrid() + renderDevbar();
+      } else {
+        main.innerHTML = renderEmpty() + renderDevbar();
+      }
     }
     renderViewer();
   }
-
-  // ============================================================
-  // 6. 入力
-  // ============================================================
 
   document.addEventListener('click', function (e) {
     var t = e.target && e.target.closest ? e.target.closest('button') : null;
@@ -534,19 +554,14 @@
       case 'add':
         if (state.signedIn) fetchOnce();
         return;
-
       case 'empty':
         state.emptyMode = !state.emptyMode;
         state.selected = null;
         if (state.emptyMode) { state.photos = []; } else { fillInitial(); }
         return render();
-
       case '401':
-        // 401 / 403（スコープ不足）: ポーリングを止め、再ログイン導線へ戻す。トークンは更新しない
         return signOut('ログインの有効期限が切れました。もう一度ログインしてください。');
-
       case '429': {
-        // 429 / 403（レート制限）: 間隔を延ばしてバナーを出す。ポーリングは止めない
         var idx = POLL_OPTIONS.indexOf(state.intervalSec);
         state.intervalSec = POLL_OPTIONS[Math.min(POLL_OPTIONS.length - 1, idx + 1)];
         state.banner = { kind: 'warn', text: 'Drive API のレート制限に達しました。更新間隔を '
@@ -554,9 +569,7 @@
         restartTimer();
         return render();
       }
-
       case '404':
-        // 個別ファイルの 404: その 1 枚だけ一覧から外す。画面全体は落とさない
         if (state.photos.length > 1) {
           var gone = state.photos.splice(1, 1)[0];
           state.selected = null;
@@ -564,7 +577,6 @@
             + gone.name + '）。表示は継続しています。' };
         }
         return render();
-
       case 'reset':
         state.emptyMode = false;
         state.intervalSec = DEFAULT_POLL_SEC;
