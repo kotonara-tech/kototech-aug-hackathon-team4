@@ -344,10 +344,18 @@ data class CaptureState(
 **テストファーストです。テストファイルを先に作ってから実装してください。**
 Red → Green → Refactor。テスト名は日本語で「何を保証するか」を書きます。
 
-**単体テストのみ書きます。** Espresso / Compose UI テスト / Robolectric /
-実機を起動するテストは**書きません**（[01-overview.md 6.3](01-overview.md#63-テストファーストただし単体テストのみ)）。
+**単体テストを基本とします。** Espresso / Compose UI テスト / Robolectric は
+引き続き**書きません**（[01-overview.md 6.3](01-overview.md#63-テストファーストただし単体テストのみ)）。
 
-配置は `src/test/kotlin/...`（`androidTest` は使いません）。
+**例外: ハードウェアの実挙動に依存する機能は `androidTest` で実機テストを書きます。**
+CameraX のトーチ制御（`Camera.cameraControl.enableTorch()`）はエミュレータや Robolectric
+では実際に点灯するかを検証できないため、2026-08-22、issue #10 を機にこの機能に限って
+例外を認めました。`domain` の抽象（`TorchController`）自体はこれまでどおり interface
+のみとし、実機ロジックの検証は `data` 層の CameraX 実装（`CameraXTorchController`）に
+対する `androidTest` で行います。
+
+配置は `src/test/kotlin/...`（`domain` と、フェイクに差し替えた `data` のロジック）と
+`src/androidTest/kotlin/...`（ハードウェアの実挙動、実機接続時のみ実行）。
 `domain` を最も厚く、`data` はフェイクに差し替えて、`presentation` は状態遷移のみ。
 
 ### 実機なしでテストできるもの（必ず書く）
@@ -364,6 +372,16 @@ Red → Green → Refactor。テスト名は日本語で「何を保証するか
 | `AppDataUploader` | 401 / 403 / 5xx が `Result.failure` になる |
 | `CaptureState` | 撮影・送信・失敗で状態が期待どおり遷移する |
 
+### androidTest が要るもの（実機接続時に自動実行、例外）
+
+| 対象 | 保証すること |
+|---|---|
+| `CameraXTorchController` | トーチを ON にできる / OFF にできる（`src/androidTest/kotlin/...`） |
+
+> `androidTest` のテスト名（バッククォート日本語名）に**スペースを含めないこと。**
+> DEX はメソッド名のスペースを許さず、`dexBuilderDebugAndroidTest` がビルド失敗します
+> （`src/test` の JVM 単体テストでは問題になりません）。
+
 ### 実機が要るもの（手動確認）
 
 - CameraX が EXIF 付き JPEG を出すこと
@@ -374,7 +392,8 @@ Red → Green → Refactor。テスト名は日本語で「何を保証するか
 
 - **外部 API を叩くテストを書かないこと。** Drive API は MockWebServer に差し替えます。
   ネットワークに依存するテストは、当日必ず落ちます
-- **結合テスト・E2E・UI テストを書かないこと。** 単体テストのみです
+- **結合テスト・E2E・UI テストを書かないこと。** ハードウェアの実挙動検証に限り
+  `androidTest` を例外的に許可します（上記）。それ以外（画面操作フローなど）は単体テストのみです
 - **`domain` のテストで `android.*` を import しないこと。** 必要になったら、
   それは `domain` に Android 依存が漏れているというサインです
 
