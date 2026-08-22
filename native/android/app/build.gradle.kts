@@ -1,9 +1,19 @@
+import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jlleitschuh.gradle.ktlint")
+}
+
+// M2疎通スパイクの WEB_CLIENT_ID（drive.appdata のサインインに使う GCP の Web 用クライアント ID）。
+// GCP の値なのでコミットしない。ビルド機ごとの local.properties にだけ置く（→ docs/00 Q11, issue #11）。
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { load(it) }
+    }
 }
 
 android {
@@ -18,6 +28,12 @@ android {
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField(
+            "String",
+            "WEB_CLIENT_ID",
+            "\"${localProperties.getProperty("WEB_CLIENT_ID", "")}\""
+        )
     }
 
     buildTypes {
@@ -48,9 +64,24 @@ android {
 
 dependencies {
     // domain / data は Android SDK に依存しない純粋ロジックなので core だけで足りる。
-    // Dispatchers.Main が要る presentation 層は M3/M4 で -android を足す。
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // M2疎通スパイク: サインイン（Credential Manager）と drive.appdata の認可（AuthorizationClient）。
+    implementation("androidx.credentials:credentials:1.6.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.2.0")
+    implementation("com.google.android.gms:play-services-auth:21.6.0")
+    // AuthorizationClient は Task ベースなので suspend で await するために使う。
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
+
+    // M2疎通スパイク: プレビューなしで1枚撮る CameraX。
+    implementation("androidx.camera:camera-core:1.5.1")
+    implementation("androidx.camera:camera-camera2:1.5.1")
+    implementation("androidx.camera:camera-lifecycle:1.5.1")
+
+    // MainActivity を ComponentActivity にして registerForActivityResult / lifecycleScope を使う。
+    implementation("androidx.activity:activity-ktx:1.12.4")
 
     testImplementation("junit:junit:4.13.2")
     // スケジューラを仮想時間で回すため。実時間を待つテストは当日落ちる。
