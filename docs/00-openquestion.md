@@ -57,22 +57,22 @@
 
 ## Q1. AppData 領域は本当に Android と Web で共有されるのか
 
-**状態: Open / 影響: ブロッカー**
+**状態: Close / 影響: ブロッカー**
 
-**このシステムが成立するかどうかの前提そのものです。**
+**決定（2026-08-22）: 共有されることを実地検証済み。**
 
 設計上は「AppData 領域は GCP プロジェクト単位 × ユーザー単位で隔離される。
 よって同一プロジェクト内の Android クライアントと Web クライアントは同じ
-`appDataFolder` を見る」としています（`02-google-drive.md` 2 節）。
+`appDataFolder` を見る」としていた（`02-google-drive.md` 2 節）。
 
-**この挙動をこのプロジェクトで実地検証していません。**
+**M2 疎通スパイク（issue #51）で検証済み。**
 
-- 検証手順は `02-google-drive.md` 7 節「疎通検証」に書いてあります
-- 検証が失敗した場合、サーバーレス SPA + AppData という構成は**破棄**になります。
-  代替案（マイドライブの共有フォルダに戻す等）を人間と再設計してください
-- **他の実装より先にここを潰してください。** ここが崩れると全部無駄になります
-
-**決めるべきこと**: 検証結果。通ったのか、通らなかったのか。
+- Android（`kotonara2026team4@gmail.com`）が `CAM001_20260822_134142.jpg` をアップロード
+  （`fileId=1FfxOkaTSTp-Du2fPoRdw1MDOLshga4pc4TTLRCkXtooD-0hKXA`）
+- 同じ `fileId` を OAuth Playground（別の Web OAuth クライアント）から
+  `files.list?spaces=appDataFolder` で取得できた
+- Android 用と Web 用の OAuth クライアントを同一 GCP プロジェクトに作る設計（02 §2）で
+  AppData が共有されることが確定した
 
 ---
 
@@ -159,20 +159,19 @@ Web SPA のポーリング間隔は UI から可変にする方針だけが決�
 
 ## Q6. `imageMediaMetadata.time` は appDataFolder でも返るのか
 
-**状態: Open / 影響: 通常**
+**状態: Close / 影響: 通常**
 
-Web 側は撮影時刻を EXIF (`imageMediaMetadata.time`) 優先で決めます。
-Drive がアップロード画像の EXIF を解析してこのフィールドを埋める挙動は、
-**AppData 領域でも同様に働くはず**ですが、確認していません。
+**決定（2026-08-22）: 返ることを実地検証済み。EXIF 優先の方針を維持する。**
 
-- 返らない場合、Web は `createdTime`（＝アップロード到着時刻）にフォールバックします
-- 圃場は電波が弱く送信が遅れるため、「朝 6 時の写真」が「夕方 18 時」と表示されます
-- 代替案: ファイル名 `CAM001_yyyyMMdd_HHmmss.jpg` から撮影時刻をパースする
-  （現設計ではファイル名を時刻判定に**使わない**方針。覆す場合はここの決定が必要）
+Web 側は撮影時刻を EXIF (`imageMediaMetadata.time`) 優先で決める設計だった。
+Drive がアップロード画像の EXIF を解析してこのフィールドを埋める挙動が、
+AppData 領域でも同様に働くかは未確認だった。
 
-**決めるべきこと**: Q1 の疎通検証と同時に `files.list` のレスポンスを目視し、
-`imageMediaMetadata.time` が入っているか確認する。入っていなければ、
-ファイル名パースへ方針変更するか判断する。
+**M2 疎通スパイク（issue #51）で検証済み。**
+
+- `CAM001_20260822_134142.jpg` の `imageMediaMetadata.time` は `2026:08:22 13:41:42`
+- 実際の撮影時刻・ファイル名の時刻と一致した
+- ファイル名パースへの方針変更は不要。`imageMediaMetadata.time` 優先のままでよい
 
 ---
 

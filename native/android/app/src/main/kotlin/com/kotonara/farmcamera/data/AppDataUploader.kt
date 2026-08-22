@@ -1,6 +1,8 @@
 package com.kotonara.farmcamera.data
 
 import com.kotonara.farmcamera.domain.PhotoUploader
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -18,8 +20,13 @@ class AppDataUploader(
         val token = accessToken().getOrThrow()
         val request = requestFactory.create(token, fileName, jpeg)
 
-        client.newCall(request).execute().use { response ->
-            response.requireSuccessfulFileId()
+        // OkHttp の execute() は同期 I/O なので、呼び出し元のディスパッチャ（Main のことがある）
+        // をブロックしないよう IO へ逃がす。忘れると実機で NetworkOnMainThreadException が
+        // メッセージ null のまま飛び、原因が追いにくい（JVM 単体テストでは再現しない）。
+        withContext(Dispatchers.IO) {
+            client.newCall(request).execute().use { response ->
+                response.requireSuccessfulFileId()
+            }
         }
     }
 
