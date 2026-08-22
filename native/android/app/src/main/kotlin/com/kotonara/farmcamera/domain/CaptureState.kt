@@ -14,9 +14,9 @@ data class CaptureState(
     val capturedCount: Int = 0,
     val uploadedCount: Int = 0,
     val lastUploadedAt: Instant? = null,
-    val lastError: String? = null
+    val lastError: String? = null,
+    val latestJpeg: ByteArray? = null,
 ) {
-
     /**
      * 撮影を開始する。**直近エラーは消す。**
      *
@@ -34,7 +34,7 @@ data class CaptureState(
     fun stopped(): CaptureState = copy(isRunning = false)
 
     /** 1 枚撮れた。送信の成否とは独立に数える。 */
-    fun captured(): CaptureState = copy(capturedCount = capturedCount + 1)
+    fun captured(jpeg: ByteArray): CaptureState = copy(capturedCount = capturedCount + 1, latestJpeg = jpeg)
 
     /**
      * 1 枚送れた。[at] は**送信が完了した時刻**。
@@ -42,8 +42,10 @@ data class CaptureState(
      * [error] に値を渡すと、送信が成功していても直近エラーとして残す。同じサイクルの
      * 別の失敗（保存など）を、送信成功で握り潰さないため（docs/03-native.md 12 節）。
      */
-    fun uploaded(at: Instant, error: String? = null): CaptureState =
-        copy(uploadedCount = uploadedCount + 1, lastUploadedAt = at, lastError = error)
+    fun uploaded(
+        at: Instant,
+        error: String? = null,
+    ): CaptureState = copy(uploadedCount = uploadedCount + 1, lastUploadedAt = at, lastError = error)
 
     /** 失敗を記録する。件数や最終送信時刻は巻き戻さない。 */
     fun failed(message: String): CaptureState = copy(lastError = message)

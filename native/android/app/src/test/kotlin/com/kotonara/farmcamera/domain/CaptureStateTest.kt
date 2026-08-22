@@ -1,18 +1,17 @@
 package com.kotonara.farmcamera.domain
 
-import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.Instant
 
 /**
  * 状態遷移だけを見る純粋なテスト。`android.*` も coroutine も要らない
  * （docs/03-native.md 9 節）。
  */
 class CaptureStateTest {
-
     private val at = Instant.parse("2026-08-22T06:03:00Z")
 
     @Test
@@ -36,13 +35,14 @@ class CaptureStateTest {
 
     @Test
     fun `stopped は実行中を解除するが、件数と直近エラーは保つ`() {
-        val state = CaptureState(
-            isRunning = true,
-            capturedCount = 3,
-            uploadedCount = 2,
-            lastUploadedAt = at,
-            lastError = "送信に失敗しました"
-        ).stopped()
+        val state =
+            CaptureState(
+                isRunning = true,
+                capturedCount = 3,
+                uploadedCount = 2,
+                lastUploadedAt = at,
+                lastError = "送信に失敗しました",
+            ).stopped()
 
         assertFalse(state.isRunning)
         assertEquals(3, state.capturedCount)
@@ -53,11 +53,13 @@ class CaptureStateTest {
 
     @Test
     fun `captured は撮影枚数だけを増やす`() {
-        val state = CaptureState(capturedCount = 1, uploadedCount = 1, lastUploadedAt = at).captured()
+        val jpeg = byteArrayOf(1, 2, 3)
+        val state = CaptureState(capturedCount = 1, uploadedCount = 1, lastUploadedAt = at).captured(jpeg)
 
         assertEquals(2, state.capturedCount)
         assertEquals("撮影しただけで送信枚数が動いてはいけない", 1, state.uploadedCount)
         assertEquals(at, state.lastUploadedAt)
+        assertEquals(jpeg.toList(), state.latestJpeg?.toList())
     }
 
     @Test
@@ -84,14 +86,15 @@ class CaptureStateTest {
         assertEquals(
             "送信成功でサイクル中の別の失敗を握り潰さない（docs/03-native.md 12 節）",
             "古い写真を削除できませんでした",
-            state.lastError
+            state.lastError,
         )
     }
 
     @Test
     fun `failed は直近エラーを載せるだけで、件数を巻き戻さない`() {
-        val state = CaptureState(capturedCount = 5, uploadedCount = 4, lastUploadedAt = at)
-            .failed("送信に失敗しました")
+        val state =
+            CaptureState(capturedCount = 5, uploadedCount = 4, lastUploadedAt = at)
+                .failed("送信に失敗しました")
 
         assertEquals("送信に失敗しました", state.lastError)
         assertEquals(5, state.capturedCount)

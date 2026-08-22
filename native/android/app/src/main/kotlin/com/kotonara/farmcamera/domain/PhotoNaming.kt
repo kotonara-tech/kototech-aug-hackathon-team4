@@ -19,7 +19,10 @@ const val CAMERA_ID: String = "CAM001"
  * Web 側はこの名前を表示にしか使わず、撮影時刻の判定には使わない（同 5 節）。
  * それでも人間がデバッグで読むため、規約は崩さないこと。
  */
-fun buildPhotoFileName(cameraId: String, at: LocalDateTime): String {
+fun buildPhotoFileName(
+    cameraId: String,
+    at: LocalDateTime,
+): String {
     fun pad2(value: Int): String = value.toString().padStart(2, '0')
 
     val date = "${at.year}${pad2(at.monthValue)}${pad2(at.dayOfMonth)}"

@@ -9,7 +9,6 @@ import kotlin.time.Duration
  * 実機なしでテストできる。
  */
 interface CaptureScheduler {
-
     /** 動作中か。停止後・開始前は false。 */
     val isActive: Boolean
 
@@ -22,7 +21,10 @@ interface CaptureScheduler {
      * タイマーが多重起動して撮影が二重に走るのを防ぐため。
      * ゼロ以下の [interval] も拒否する。受け付けるとタイマーが暴走する。
      */
-    fun start(interval: Duration, onTick: () -> Unit): Boolean
+    fun start(
+        interval: Duration,
+        onTick: () -> Unit,
+    ): Boolean
 
     /** 停止する。停止後は発火しない。 */
     fun stop()

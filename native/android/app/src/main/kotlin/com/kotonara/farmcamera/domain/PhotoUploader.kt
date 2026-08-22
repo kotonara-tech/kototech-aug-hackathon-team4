@@ -7,5 +7,8 @@ package com.kotonara.farmcamera.domain
  */
 interface PhotoUploader {
     /** 成功時は Google Drive のファイル ID を返す。 */
-    suspend fun upload(fileName: String, jpeg: ByteArray): Result<String>
+    suspend fun upload(
+        fileName: String,
+        jpeg: ByteArray,
+    ): Result<String>
 }

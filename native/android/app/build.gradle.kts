@@ -1,20 +1,22 @@
-import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
     id("org.jlleitschuh.gradle.ktlint")
 }
 
 // M2疎通スパイクの WEB_CLIENT_ID（drive.appdata のサインインに使う GCP の Web 用クライアント ID）。
 // GCP の値なのでコミットしない。ビルド機ごとの local.properties にだけ置く（→ docs/00 Q11, issue #11）。
-val localProperties = Properties().apply {
-    val localPropertiesFile = rootProject.file("local.properties")
-    if (localPropertiesFile.exists()) {
-        localPropertiesFile.inputStream().use { load(it) }
+val localProperties =
+    Properties().apply {
+        val localPropertiesFile = rootProject.file("local.properties")
+        if (localPropertiesFile.exists()) {
+            localPropertiesFile.inputStream().use { load(it) }
+        }
     }
-}
 
 android {
     namespace = "com.kotonara.farmcamera"
@@ -32,7 +34,7 @@ android {
         buildConfigField(
             "String",
             "WEB_CLIENT_ID",
-            "\"${localProperties.getProperty("WEB_CLIENT_ID", "")}\""
+            "\"${localProperties.getProperty("WEB_CLIENT_ID", "")}\"",
         )
     }
 
@@ -48,6 +50,7 @@ android {
 
     buildFeatures {
         buildConfig = true
+        compose = true
     }
 
     compileOptions {
@@ -82,6 +85,12 @@ dependencies {
 
     // MainActivity を ComponentActivity にして registerForActivityResult / lifecycleScope を使う。
     implementation("androidx.activity:activity-ktx:1.12.4")
+    implementation("androidx.activity:activity-compose:1.10.1")
+    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
 
     // M3: Foreground Service（CaptureService）。LifecycleService で lifecycleScope を使い、
     // ServiceCompat.startForeground() で foregroundServiceType を API 差異を吸収して指定する。

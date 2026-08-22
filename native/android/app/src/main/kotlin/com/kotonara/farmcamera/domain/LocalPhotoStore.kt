@@ -11,7 +11,10 @@ package com.kotonara.farmcamera.domain
  * 長期保管は Web アプリ側の責務なので、端末側に履歴や上限の概念は持たせない。
  */
 interface LocalPhotoStore {
-    suspend fun save(fileName: String, jpeg: ByteArray): Result<Unit>
+    suspend fun save(
+        fileName: String,
+        jpeg: ByteArray,
+    ): Result<Unit>
 }
 
 /**
@@ -21,5 +24,8 @@ interface LocalPhotoStore {
  * あとで消す判断が難しくなるうえ、決まっていない仕様が実装として既成事実になる。
  */
 object NoOpLocalPhotoStore : LocalPhotoStore {
-    override suspend fun save(fileName: String, jpeg: ByteArray): Result<Unit> = Result.success(Unit)
+    override suspend fun save(
+        fileName: String,
+        jpeg: ByteArray,
+    ): Result<Unit> = Result.success(Unit)
 }

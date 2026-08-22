@@ -1,21 +1,18 @@
 package com.kotonara.farmcamera.domain
 
+import kotlinx.coroutines.delay
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
 import kotlin.time.Duration
-import kotlinx.coroutines.delay
 
-/**
- * [CaptureCoordinator] のテスト用フェイク群。
- *
- * カメラ・ネットワーク・時計を実物に触らせないために置いている。実機や外部 API を
- * 叩くテストは当日必ず落ちる（docs/01-overview.md 6.3 / docs/03-native.md 9 節）。
- */
+// [CaptureCoordinator] のテスト用フェイク群。
+//
+// カメラ・ネットワーク・時計を実物に触らせないために置いている。実機や外部 API を
+// 叩くテストは当日必ず落ちる（docs/01-overview.md 6.3 / docs/03-native.md 9 節）。
 
 /** 発火のタイミングをテストが完全に握るスケジューラ。 */
 class FakeCaptureScheduler : CaptureScheduler {
-
     /** `false` にすると start を拒否する（ゼロ以下の間隔を渡された実装の代役）。 */
     var acceptsStart: Boolean = true
 
@@ -30,7 +27,10 @@ class FakeCaptureScheduler : CaptureScheduler {
 
     private var onTick: (() -> Unit)? = null
 
-    override fun start(interval: Duration, onTick: () -> Unit): Boolean {
+    override fun start(
+        interval: Duration,
+        onTick: () -> Unit,
+    ): Boolean {
         if (!acceptsStart) return false
         startedInterval = interval
         this.onTick = onTick
@@ -51,8 +51,9 @@ class FakeCaptureScheduler : CaptureScheduler {
 }
 
 /** 撮影を返すフェイク。[captureDuration] で「撮影に時間がかかる」状況を作れる。 */
-class FakePhotoSource(private val jpeg: ByteArray = JPEG) : PhotoSource {
-
+class FakePhotoSource(
+    private val jpeg: ByteArray = JPEG,
+) : PhotoSource {
     var captureCount: Int = 0
         private set
 
@@ -73,7 +74,6 @@ class FakePhotoSource(private val jpeg: ByteArray = JPEG) : PhotoSource {
 
 /** 送信のフェイク。[uploadDuration] で「送信が撮影間隔より長い」状況を作れる。 */
 class FakePhotoUploader : PhotoUploader {
-
     val requests: MutableList<Pair<String, ByteArray>> = mutableListOf()
 
     var uploadDuration: Duration = Duration.ZERO
@@ -82,24 +82,59 @@ class FakePhotoUploader : PhotoUploader {
     var completedCount: Int = 0
         private set
 
-    override suspend fun upload(fileName: String, jpeg: ByteArray): Result<String> {
+    var activeUploadCount: Int = 0
+        private set
+
+    var maxConcurrentUploads: Int = 0
+        private set
+
+    override suspend fun upload(
+        fileName: String,
+        jpeg: ByteArray,
+    ): Result<String> {
         requests += fileName to jpeg
-        if (uploadDuration > Duration.ZERO) delay(uploadDuration)
-        completedCount++
-        return failWith?.let { Result.failure(it) } ?: Result.success("file-$completedCount")
+        activeUploadCount++
+        maxConcurrentUploads = maxOf(maxConcurrentUploads, activeUploadCount)
+        try {
+            if (uploadDuration > Duration.ZERO) delay(uploadDuration)
+            completedCount++
+            return failWith?.let { Result.failure(it) } ?: Result.success("file-$completedCount")
+        } finally {
+            activeUploadCount--
+        }
     }
 }
 
 /** 端末保存のフェイク。Q16（#42）が決まるまで実装は入らないので、記録だけ取る。 */
 class RecordingLocalPhotoStore : LocalPhotoStore {
-
     val saved: MutableList<Pair<String, ByteArray>> = mutableListOf()
 
     var failWith: Throwable? = null
 
-    override suspend fun save(fileName: String, jpeg: ByteArray): Result<Unit> {
+    override suspend fun save(
+        fileName: String,
+        jpeg: ByteArray,
+    ): Result<Unit> {
         saved += fileName to jpeg
         return failWith?.let { Result.failure(it) } ?: Result.success(Unit)
+    }
+}
+
+class RecordingPhotoUploadStatusStore : PhotoUploadStatusStore {
+    val pending = mutableListOf<String>()
+    val uploaded = mutableListOf<String>()
+    val failed = mutableListOf<String>()
+
+    override fun markPending(fileName: String) {
+        pending += fileName
+    }
+
+    override fun markUploaded(fileName: String) {
+        uploaded += fileName
+    }
+
+    override fun markFailed(fileName: String) {
+        failed += fileName
     }
 }
 
@@ -109,8 +144,10 @@ class RecordingLocalPhotoStore : LocalPhotoStore {
  * coroutine の仮想時間は `delay` にしか効かないので、ファイル名と最終送信時刻の
  * ためには別途こちらを進める。
  */
-class MutableClock(private var current: Instant, private val zone: ZoneId) : Clock() {
-
+class MutableClock(
+    private var current: Instant,
+    private val zone: ZoneId,
+) : Clock() {
     override fun getZone(): ZoneId = zone
 
     override fun withZone(zone: ZoneId): Clock = MutableClock(current, zone)
