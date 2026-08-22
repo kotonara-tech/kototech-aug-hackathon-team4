@@ -41,6 +41,8 @@ android {
     buildTypes {
         debug {
             enableUnitTestCoverage = true
+            // connectedDebugAndroidTest の実行結果も JaCoCo の集計対象にする。
+            enableAndroidTestCoverage = true
         }
 
         release {
