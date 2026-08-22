@@ -9,7 +9,7 @@
 | Codex | Kotlin M0 | `android/` プロジェクト、Gradle / JDK / APKのビルド疎通 | `android/gradlew.bat -p android test assembleDebug` が成功 |
 | Claude Code | Kotlin M1a | `PhotoNaming` / `CaptureScheduler` のTDD実装 | 命名、即時発火、停止、多重開始拒否を日本語テストで固定 |
 | Claude Code | Kotlin M1b | `CaptureState` / `CaptureCoordinator` / 抽象のTDD実装 | 送信遅延で撮影を欠測させず、送信失敗を状態へ反映 |
-| Codex | Kotlin M1c | `AppDataUploader` のTDD実装 | multipart URL、Bearer、`parents:["appDataFolder"]`、4xx/5xxをMockWebServerで固定 |
+| Claude Code | Kotlin M1c / #50 | `AppDataUploader` のTDD実装 | multipart URL、Bearer、`parents:["appDataFolder"]`、4xx/5xxをMockWebServerで固定 |
 
 ## 検証ゲート後
 
