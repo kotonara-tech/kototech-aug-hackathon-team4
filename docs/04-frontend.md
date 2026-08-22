@@ -350,5 +350,5 @@ npm run test
 - **EXIF と `createdTime` を同じパーサに通さないこと**（6.3）
 - **JST 決め打ちである**ことを忘れないでください
 - **状態管理ライブラリを入れないこと。**状態は 3 つしかありません
-- 旧 `web/app/`（FastAPI + Jinja2）は破棄対象です。
+- 旧 `web/app/`（FastAPI + Jinja2）は `legacy/web-app/` へ退避済みです。
   削除タイミングは未決（→ [Q2](00-openquestion.md)）

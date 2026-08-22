@@ -1,3 +1,7 @@
+> **廃止。この文書は旧方針（マイドライブ直下 `FarmCameraPOC` + `drive.file` / `drive.readonly`）で
+> 書かれており、現在の設計とは一致しません。設計正本は `docs/` です。**
+> 経緯は [legacy/README.md](README.md) / [Q2](../docs/00-openquestion.md) を参照。
+
 # AGENTS.md — 定点撮影MVP（Android / Flutter）
 
 このドキュメントは実装前の仕様書。対象は `POC_ToDo_担当A_Androidアプリ.docx` に定義されたハッカソン当日ゴールを最速で満たす**最小MVP**であり、`risk-assessment.md` に記載した将来拡張（農場名登録・撮影担当・未送信データ非削除保持・画像拡大ビューアなど）はここでは**意図的に対象外**とする。将来拡張はGitHubのSTEP issue（#3〜#7, #9, #10）としてバックログに残す。

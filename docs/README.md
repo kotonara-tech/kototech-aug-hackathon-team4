@@ -31,11 +31,8 @@
 
 ## 既存ドキュメントとの関係
 
-リポジトリには旧方針（マイドライブ直下 `FarmCameraPOC` + `drive.file`/`drive.readonly`）で
-書かれたドキュメントが残っています。
+旧方針（マイドライブ直下 `FarmCameraPOC` + `drive.file`/`drive.readonly`）で書かれた
+実装とドキュメントは、**すべて [`../legacy/`](../legacy/) へ退避済み**です
+（→ [Q2](00-openquestion.md) は Close）。
 
-- `web/CLAUDE.md` / `web/README.md` / `web/docs/担当A向け連携仕様.md`
-- `native/AGENTS.md` / `native/PROGRESS.md`
-
-**これらとこのディレクトリが矛盾したら、このディレクトリが正です。**
-旧ドキュメントの処遇は未決（→ [Q2](00-openquestion.md)）。
+`legacy/` 配下のものは読んで実装しないでください。矛盾したらこのディレクトリが正です。

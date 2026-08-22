@@ -136,26 +136,31 @@ issue が無い作業は番号を省いて構いません（例: `fix/capture-sk
 
 ## 7. リポジトリの現状（重要）
 
-**`native/app/`（Flutter）と `web/app/`（FastAPI + Jinja2）は旧方針の実装で、破棄対象です。**
+**旧方針の実装とドキュメントは、すべて [`legacy/`](legacy/) へ退避済みです**
+（→ [Q2](docs/00-openquestion.md) は Close）。
 
-| 旧 | 新 |
+| 旧（`legacy/` にある） | 新 |
 |---|---|
-| `native/app/` — Flutter 3.47、55 テスト、APK ビルド済み | Kotlin + CameraX + Foreground Service へ全面書き直し |
-| `web/app/` — FastAPI + Jinja2 | React + Vite SPA へ全面書き直し |
+| `legacy/native-app/` — Flutter 3.47、110 テスト、APK ビルド済み | `native/android/` に Kotlin + CameraX + Foreground Service |
+| `legacy/web-app/` — FastAPI + Jinja2 | React + Vite SPA |
 | マイドライブ直下 `FarmCameraPOC` フォルダ | `appDataFolder`（AppData 領域） |
 | `drive.file`（Native）/ `drive.readonly`（Web） | 両側とも `drive.appdata` |
 
-以下のドキュメントは**旧方針のまま**です。`docs/` と矛盾したら **`docs/` が正**です。
+`legacy/` 配下の文書には冒頭に廃止注記が入っています。
 
-`web/CLAUDE.md` / `web/README.md` / `web/docs/担当A向け連携仕様.md` /
-`native/AGENTS.md` / `native/PROGRESS.md`
-
-> 注意: **これらを読んで旧方針で実装しないでください。**
+> 注意: **`legacy/` を読んで旧方針で実装しないでください。**
 > `drive.file` で書いて `drive.readonly` で読む実装が生まれ、
 > 原因不明の 0 枚問題として跳ね返ってきます。
-> 処遇は未決（→ [Q2](docs/00-openquestion.md)）。
+> 消さずに残しているのは、[docs/05 §3](docs/05-implementation-plan.md) の M1 で
+> 命名規約・スケジューラ・**撮影スキップ退行の再発防止テスト**を移植するためです。
 
----
+### ディレクトリ構成
+
+```
+docs/            設計正本
+native/android/  Kotlin の Android 実装（これから作る）
+legacy/          廃止済み。読んで実装しない
+```
 
 ## 8. 実装の着手順序
 
