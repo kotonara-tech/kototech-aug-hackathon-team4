@@ -2,6 +2,7 @@ package com.kotonara.farmcamera
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.Button
@@ -22,6 +23,7 @@ import com.kotonara.farmcamera.domain.PhotoSource
 import com.kotonara.farmcamera.domain.PhotoUploader
 import com.kotonara.farmcamera.domain.TorchController
 import com.kotonara.farmcamera.domain.buildPhotoFileName
+import com.kotonara.farmcamera.presentation.CaptureService
 import java.time.LocalDateTime
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
@@ -45,12 +47,20 @@ class MainActivity : ComponentActivity() {
 
     private var torchOn = false
     private var pendingCameraPermission: CompletableDeferred<Boolean>? = null
+    private var pendingNotificationPermission: CompletableDeferred<Boolean>? = null
 
     private val cameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         pendingCameraPermission?.complete(granted)
         pendingCameraPermission = null
+    }
+
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        pendingNotificationPermission?.complete(granted)
+        pendingNotificationPermission = null
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,6 +85,21 @@ class MainActivity : ComponentActivity() {
             setOnClickListener { toggleTorch() }
         }
 
+        // M3（issue #52）の実機検証用ボタン。M4 で Compose のステータス画面に置き換わるまでの
+        // 暫定 UI。「検証開始」でサインイン・drive.appdata 同意を済ませたあとに使う。
+        val serviceStartButton = Button(this).apply {
+            text = "常駐撮影 開始（Foreground Service）"
+            setOnClickListener { startCaptureService() }
+        }
+
+        val serviceStopButton = Button(this).apply {
+            text = "常駐撮影 停止"
+            setOnClickListener {
+                CaptureService.stop(this@MainActivity)
+                log("常駐撮影を停止しました")
+            }
+        }
+
         logView = TextView(this).apply {
             setPadding(32, 32, 32, 32)
             text = "ボタンを押すと02 §7の手順1〜4を実行します。"
@@ -87,6 +112,8 @@ class MainActivity : ComponentActivity() {
             gravity = Gravity.TOP
             addView(startButton)
             addView(torchButton)
+            addView(serviceStartButton)
+            addView(serviceStopButton)
             addView(scroll)
         }
     }
@@ -157,6 +184,22 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun startCaptureService() {
+        lifecycleScope.launch {
+            if (!awaitCameraPermission()) {
+                log("✗ カメラ権限が拒否されました。設定から許可してください。")
+                return@launch
+            }
+            if (!awaitNotificationPermission()) {
+                log("✗ 通知権限が拒否されました。常駐通知を出せないため開始できません。")
+                return@launch
+            }
+
+            CaptureService.start(this@MainActivity)
+            log("✓ 常駐撮影を開始しました（先に「検証開始」でサインイン済みであること）")
+        }
+    }
+
     private suspend fun awaitCameraPermission(): Boolean {
         val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
@@ -165,6 +208,20 @@ class MainActivity : ComponentActivity() {
         val deferred = CompletableDeferred<Boolean>()
         pendingCameraPermission = deferred
         cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        return deferred.await()
+    }
+
+    private suspend fun awaitNotificationPermission(): Boolean {
+        // POST_NOTIFICATIONS は API 33+ でのみ実行時リクエストが要る（issue #52）。
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+
+        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) return true
+
+        val deferred = CompletableDeferred<Boolean>()
+        pendingNotificationPermission = deferred
+        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         return deferred.await()
     }
 

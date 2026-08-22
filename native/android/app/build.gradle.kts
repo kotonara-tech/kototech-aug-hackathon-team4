@@ -83,6 +83,11 @@ dependencies {
     // MainActivity を ComponentActivity にして registerForActivityResult / lifecycleScope を使う。
     implementation("androidx.activity:activity-ktx:1.12.4")
 
+    // M3: Foreground Service（CaptureService）。LifecycleService で lifecycleScope を使い、
+    // ServiceCompat.startForeground() で foregroundServiceType を API 差異を吸収して指定する。
+    implementation("androidx.lifecycle:lifecycle-service:2.9.4")
+    implementation("androidx.core:core-ktx:1.17.0")
+
     testImplementation("junit:junit:4.13.2")
     // スケジューラを仮想時間で回すため。実時間を待つテストは当日落ちる。
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
