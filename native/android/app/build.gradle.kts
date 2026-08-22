@@ -87,4 +87,11 @@ dependencies {
     // スケジューラを仮想時間で回すため。実時間を待つテストは当日落ちる。
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+
+    // トーチ制御（issue #10）: 実機のカメラハードウェアに依存するため androidTest で検証する
+    // 例外（docs/03-native.md 9 節）。
+    androidTestImplementation("androidx.test:core:1.7.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test:rules:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
 }

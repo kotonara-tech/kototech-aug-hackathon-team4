@@ -14,11 +14,13 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.kotonara.farmcamera.data.AppDataUploader
 import com.kotonara.farmcamera.data.CameraXPhotoSource
+import com.kotonara.farmcamera.data.CameraXTorchController
 import com.kotonara.farmcamera.data.CredentialAuthGateway
 import com.kotonara.farmcamera.domain.AuthGateway
 import com.kotonara.farmcamera.domain.CAMERA_ID
 import com.kotonara.farmcamera.domain.PhotoSource
 import com.kotonara.farmcamera.domain.PhotoUploader
+import com.kotonara.farmcamera.domain.TorchController
 import com.kotonara.farmcamera.domain.buildPhotoFileName
 import java.time.LocalDateTime
 import kotlinx.coroutines.CompletableDeferred
@@ -38,8 +40,10 @@ class MainActivity : ComponentActivity() {
     private lateinit var authGateway: AuthGateway
     private lateinit var photoSource: PhotoSource
     private lateinit var uploader: PhotoUploader
+    private lateinit var torchController: TorchController
     private lateinit var logView: TextView
 
+    private var torchOn = false
     private var pendingCameraPermission: CompletableDeferred<Boolean>? = null
 
     private val cameraPermissionLauncher = registerForActivityResult(
@@ -55,6 +59,7 @@ class MainActivity : ComponentActivity() {
         authGateway = CredentialAuthGateway(this)
         photoSource = CameraXPhotoSource(this, this)
         uploader = AppDataUploader(client = OkHttpClient(), accessToken = { authGateway.accessToken() })
+        torchController = CameraXTorchController(this, this)
 
         setContentView(buildLayout())
     }
@@ -63,6 +68,11 @@ class MainActivity : ComponentActivity() {
         val startButton = Button(this).apply {
             text = "検証開始（サインイン→認可→撮影→送信）"
             setOnClickListener { runVerification() }
+        }
+
+        val torchButton = Button(this).apply {
+            text = "トーチ ON/OFF"
+            setOnClickListener { toggleTorch() }
         }
 
         logView = TextView(this).apply {
@@ -76,6 +86,7 @@ class MainActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.TOP
             addView(startButton)
+            addView(torchButton)
             addView(scroll)
         }
     }
@@ -124,6 +135,24 @@ class MainActivity : ComponentActivity() {
                     log("=== 検証完了。OAuth Playground で files.list?spaces=appDataFolder を確認してください ===")
                 },
                 onFailure = { failure -> log("✗ アップロード失敗: ${failure.message}") }
+            )
+        }
+    }
+
+    private fun toggleTorch() {
+        lifecycleScope.launch {
+            if (!awaitCameraPermission()) {
+                log("✗ カメラ権限が拒否されました。設定から許可してください。")
+                return@launch
+            }
+
+            val nextState = !torchOn
+            torchController.setEnabled(nextState).fold(
+                onSuccess = {
+                    torchOn = nextState
+                    log(if (torchOn) "✓ トーチON" else "✓ トーチOFF")
+                },
+                onFailure = { failure -> log("✗ トーチ切替失敗: ${failure.message}") }
             )
         }
     }
