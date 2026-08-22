@@ -34,7 +34,7 @@ class CameraXTorchControllerTest {
 
             scenario.onActivity { activity ->
                 activity.lifecycleScope.launch {
-                    val controller = CameraXTorchController(activity, activity)
+                    val controller = CameraXTorchController(activity)
                     onResult.set(controller.setEnabled(true))
                     offResult.set(controller.setEnabled(false))
                     latch.countDown()
