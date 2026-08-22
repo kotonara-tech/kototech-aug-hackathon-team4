@@ -6,6 +6,7 @@ import 'capture_session.dart';
 import 'drive_uploader.dart';
 import 'photo_record.dart';
 import 'photo_source.dart';
+import 'photo_storage.dart';
 import 'photo_uploader.dart';
 import 'wake_lock.dart';
 
@@ -34,6 +35,7 @@ class FarmCameraApp extends StatelessWidget {
     this.uploader,
     this.wakeLock,
     this.recordStore,
+    this.fileStore,
   });
 
   final PhotoSource source;
@@ -48,6 +50,9 @@ class FarmCameraApp extends StatelessWidget {
   /// 省略時は端末内（SharedPreferences）へ撮影記録を保存する。
   final PhotoRecordStore? recordStore;
 
+  /// 省略時は履歴から落ちた写真の実体を保存先から削除する（#32）。
+  final PhotoFileStore? fileStore;
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -59,6 +64,7 @@ class FarmCameraApp extends StatelessWidget {
         uploader: uploader,
         wakeLock: wakeLock,
         recordStore: recordStore,
+        fileStore: fileStore,
       ),
     );
   }
@@ -76,6 +82,7 @@ class CaptureScreen extends StatefulWidget {
     this.uploader,
     this.wakeLock,
     this.recordStore,
+    this.fileStore,
   });
 
   final PhotoSource source;
@@ -87,6 +94,9 @@ class CaptureScreen extends StatefulWidget {
 
   /// 省略時は端末内（SharedPreferences）へ撮影記録を保存する。
   final PhotoRecordStore? recordStore;
+
+  /// 省略時は履歴から落ちた写真の実体を保存先から削除する（#32）。
+  final PhotoFileStore? fileStore;
 
   @override
   State<CaptureScreen> createState() => _CaptureScreenState();
@@ -111,6 +121,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
       wakeLock: widget.wakeLock ?? const ScreenWakeLock(),
       recordStore:
           widget.recordStore ?? SharedPreferencesPhotoRecordStore(),
+      fileStore: widget.fileStore ??
+          DirectoryPhotoFileStore(resolvePhotoDirectory),
     );
     _bootstrap();
   }
